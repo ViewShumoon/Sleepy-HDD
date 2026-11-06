@@ -28,6 +28,9 @@ public sealed class DiskInventory
     public IReadOnlyList<ManagedDisk> EnumerateManagedDisks()
     {
         var volumesByDisk = MapVolumesToDisks();
+        var bootSystemLetters = new HashSet<string>(
+            _deviceOps.GetBootSystemDriveLetters(),
+            StringComparer.OrdinalIgnoreCase);
 
         var managed = new List<ManagedDisk>();
         foreach (var disk in _deviceOps.EnumerateDisks())
@@ -40,6 +43,10 @@ public sealed class DiskInventory
                 continue;
             }
 
+            IReadOnlyList<ManagedVolume> volumes = volumesByDisk.TryGetValue(disk.DiskNumber, out var mapped)
+                ? mapped
+                : Array.Empty<ManagedVolume>();
+
             managed.Add(new ManagedDisk
             {
                 DiskNumber = disk.DiskNumber,
@@ -47,15 +54,32 @@ public sealed class DiskInventory
                 Model = disk.Model,
                 SerialNumber = disk.SerialNumber,
                 SizeBytes = disk.SizeBytes,
-                Volumes = volumesByDisk.TryGetValue(disk.DiskNumber, out var volumes)
-                    ? volumes
-                    : Array.Empty<ManagedVolume>(),
+                Volumes = volumes,
+                RestrictedReasons = ClassifyRestricted(disk, volumes, bootSystemLetters),
             });
         }
 
         return managed
             .OrderBy(d => d.DiskNumber)
             .ToList();
+    }
+
+    /// <summary>
+    /// 受限判定：按 RestrictedReason 声明顺序（即优先级）收集全部命中原因。
+    /// </summary>
+    private IReadOnlyList<RestrictedReason> ClassifyRestricted(
+        DiskDescriptor disk,
+        IReadOnlyList<ManagedVolume> volumes,
+        HashSet<string> bootSystemLetters)
+    {
+        var reasons = new List<RestrictedReason>();
+
+        if (volumes.Any(v => bootSystemLetters.Contains(v.DriveLetter)))
+        {
+            reasons.Add(RestrictedReason.BootOrSystemVolume);
+        }
+
+        return reasons;
     }
 
     /// <summary>
