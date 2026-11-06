@@ -4,7 +4,7 @@ namespace SleepyHDD.Core.Tests.Fakes;
 
 /// <summary>
 /// IDiskDeviceOps 的测试替身：以数据驱动返回磁盘、寻道惩罚与卷，
-/// 并记录全部设备调用序列（lock:/dismount:/unlock:/flush:/standby:/occupants: 前缀）供断言。
+/// 并记录全部设备调用序列（lock:/dismount:/unlock:/flush:/standby:/occupants:/set-offline:/clear-offline: 前缀）供断言。
 /// </summary>
 internal sealed class FakeDiskDeviceOps : IDiskDeviceOps
 {
@@ -40,6 +40,12 @@ internal sealed class FakeDiskDeviceOps : IDiskDeviceOps
 
     /// <summary>ATA pass-through 试探结果；未配置的盘默认可用（不受限）。</summary>
     public Dictionary<int, bool> AtaProbes { get; } = new();
+
+    /// <summary>SetDiskOffline 将失败的盘编号集合。</summary>
+    public HashSet<int> SetOfflineFailures { get; } = new();
+
+    /// <summary>ClearDiskOffline 将失败的盘编号集合。</summary>
+    public HashSet<int> ClearOfflineFailures { get; } = new();
 
     public IReadOnlyList<DiskDescriptor> EnumerateDisks() => Disks;
 
@@ -104,6 +110,18 @@ internal sealed class FakeDiskDeviceOps : IDiskDeviceOps
 
     public bool ProbeAtaPassThrough(int diskNumber)
         => AtaProbes.TryGetValue(diskNumber, out var available) ? available : true;
+
+    public bool SetDiskOffline(int diskNumber)
+    {
+        Record($"set-offline:{diskNumber}");
+        return !SetOfflineFailures.Contains(diskNumber);
+    }
+
+    public bool ClearDiskOffline(int diskNumber)
+    {
+        Record($"clear-offline:{diskNumber}");
+        return !ClearOfflineFailures.Contains(diskNumber);
+    }
 
     /// <summary>Calls 中是否包含以指定前缀开头的记录。</summary>
     public bool HasCall(string prefix)

@@ -19,6 +19,24 @@ internal static class NativeMethods
     /// <summary>CTL_CODE(FILE_DEVICE_DISK, 0x17, BUFFERED, FILE_READ_ACCESS)。</summary>
     public const uint IOCTL_DISK_GET_LENGTH_INFO = 0x0007405C;
 
+    /// <summary>CTL_CODE(FILE_DEVICE_DISK, 0x28, BUFFERED, READ|WRITE)。</summary>
+    public const uint IOCTL_DISK_SET_DISK_ATTRIBUTES = 0x0007C0A0;
+
+    /// <summary>CTL_CODE(FILE_DEVICE_DISK, 0x29, BUFFERED, FILE_READ_ACCESS)。</summary>
+    public const uint IOCTL_DISK_GET_DISK_ATTRIBUTES = 0x000740A4;
+
+    /// <summary>DISK_ATTRIBUTE_OFFLINE：置位后该盘的卷从系统消失（ADR-0002，须与停转组合）。</summary>
+    public const ulong DiskAttributeOffline = 0x0000000000000001;
+
+    /// <summary>SET/GET_DISK_ATTRIBUTES 的 Version 字段。</summary>
+    public const uint DiskAttributesVersion = 1;
+
+    /// <summary>
+    /// 头部四个 ACCESS_MODE 位域（各 1 位）+ Reserved(28)：C 侧样例把 AccessModeDisabled(2)
+    /// 赋入 1 位域按截断落线为 1，即低 4 位全置 0xF；驱动只校验 Attributes。
+    /// </summary>
+    public const uint DiskAttributesAccessModes = 0xF;
+
     /// <summary>CTL_CODE(FILE_DEVICE_CONTROLLER, 0x40C, BUFFERED, READ|WRITE)。</summary>
     public const uint IOCTL_ATA_PASS_THROUGH_DIRECT = 0x0004D030;
 
@@ -128,6 +146,18 @@ internal static class NativeMethods
         public uint Version;
         public uint Size;
         public byte IncursSeekPenalty;
+    }
+
+    /// <summary>
+    /// SET_DISK_ATTRIBUTES / GET_DISK_ATTRIBUTES 的公共布局（两者仅字段方向不同）：
+    /// Version(4) + AccessRead/Write/Execute/Dedup 各 1 位与 Reserved 28 位（4） + Attributes(8)。
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct DISK_ATTRIBUTES
+    {
+        public uint Version;
+        public uint AccessModes;
+        public ulong Attributes;
     }
 
     [StructLayout(LayoutKind.Sequential)]
