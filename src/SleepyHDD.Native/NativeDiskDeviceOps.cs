@@ -138,15 +138,8 @@ public sealed class NativeDiskDeviceOps : IDiskDeviceOps
     public bool IsDynamicOrSpacesMember(int diskNumber)
     {
         string path = $@"\\.\PhysicalDrive{diskNumber}";
-        using SafeFileHandle handle = NativeMethods.CreateFileW(
-            path,
-            NativeMethods.GENERIC_READ,
-            NativeMethods.FILE_SHARE_READ_WRITE,
-            IntPtr.Zero,
-            NativeMethods.OPEN_EXISTING,
-            0,
-            IntPtr.Zero);
-        if (handle.IsInvalid)
+        using SafeFileHandle? handle = TryOpenPhysicalDrive(path, NativeMethods.GENERIC_READ);
+        if (handle is null)
         {
             return false;
         }
@@ -199,15 +192,9 @@ public sealed class NativeDiskDeviceOps : IDiskDeviceOps
     private static unsafe bool TryModifyDiskOffline(int diskNumber, bool offline)
     {
         string path = $@"\\.\PhysicalDrive{diskNumber}";
-        using SafeFileHandle handle = NativeMethods.CreateFileW(
-            path,
-            NativeMethods.GENERIC_READ | NativeMethods.GENERIC_WRITE,
-            NativeMethods.FILE_SHARE_READ_WRITE,
-            IntPtr.Zero,
-            NativeMethods.OPEN_EXISTING,
-            0,
-            IntPtr.Zero);
-        if (handle.IsInvalid)
+        using SafeFileHandle? handle = TryOpenPhysicalDrive(
+            path, NativeMethods.GENERIC_READ | NativeMethods.GENERIC_WRITE);
+        if (handle is null)
         {
             return false;
         }
@@ -261,6 +248,29 @@ public sealed class NativeDiskDeviceOps : IDiskDeviceOps
                 letters.Add(letter);
             }
         }
+    }
+
+    /// <summary>
+    /// 打开 \\.\PhysicalDriveN（共享读写、OPEN_EXISTING）：成功返回句柄（调用方负责释放），
+    /// 失败返回 null（无效句柄已在内部释放）。
+    /// </summary>
+    private static SafeFileHandle? TryOpenPhysicalDrive(string path, uint desiredAccess)
+    {
+        SafeFileHandle handle = NativeMethods.CreateFileW(
+            path,
+            desiredAccess,
+            NativeMethods.FILE_SHARE_READ_WRITE,
+            IntPtr.Zero,
+            NativeMethods.OPEN_EXISTING,
+            0,
+            IntPtr.Zero);
+        if (handle.IsInvalid)
+        {
+            handle.Dispose();
+            return null;
+        }
+
+        return handle;
     }
 
     private static bool TryReadAt(SafeFileHandle handle, long offset, byte[] buffer)
@@ -334,15 +344,9 @@ public sealed class NativeDiskDeviceOps : IDiskDeviceOps
     /// </summary>
     private static unsafe bool TryRunAtaIdentifyDevice(string physicalDrivePath, byte[] identifyData)
     {
-        using SafeFileHandle handle = NativeMethods.CreateFileW(
-            physicalDrivePath,
-            NativeMethods.GENERIC_READ | NativeMethods.GENERIC_WRITE,
-            NativeMethods.FILE_SHARE_READ_WRITE,
-            IntPtr.Zero,
-            NativeMethods.OPEN_EXISTING,
-            0,
-            IntPtr.Zero);
-        if (handle.IsInvalid)
+        using SafeFileHandle? handle = TryOpenPhysicalDrive(
+            physicalDrivePath, NativeMethods.GENERIC_READ | NativeMethods.GENERIC_WRITE);
+        if (handle is null)
         {
             return false;
         }
@@ -414,15 +418,8 @@ public sealed class NativeDiskDeviceOps : IDiskDeviceOps
 
     private static unsafe DiskDescriptor? ReadDisk(string physicalDrivePath, int expectedNumber)
     {
-        using SafeFileHandle handle = NativeMethods.CreateFileW(
-            physicalDrivePath,
-            0,
-            NativeMethods.FILE_SHARE_READ_WRITE,
-            IntPtr.Zero,
-            NativeMethods.OPEN_EXISTING,
-            0,
-            IntPtr.Zero);
-        if (handle.IsInvalid)
+        using SafeFileHandle? handle = TryOpenPhysicalDrive(physicalDrivePath, 0);
+        if (handle is null)
         {
             return null;
         }
@@ -469,15 +466,8 @@ public sealed class NativeDiskDeviceOps : IDiskDeviceOps
     /// </summary>
     private static unsafe long TryGetDiskLength(string physicalDrivePath)
     {
-        using SafeFileHandle handle = NativeMethods.CreateFileW(
-            physicalDrivePath,
-            NativeMethods.GENERIC_READ,
-            NativeMethods.FILE_SHARE_READ_WRITE,
-            IntPtr.Zero,
-            NativeMethods.OPEN_EXISTING,
-            0,
-            IntPtr.Zero);
-        if (handle.IsInvalid)
+        using SafeFileHandle? handle = TryOpenPhysicalDrive(physicalDrivePath, NativeMethods.GENERIC_READ);
+        if (handle is null)
         {
             return 0;
         }
@@ -565,15 +555,8 @@ public sealed class NativeDiskDeviceOps : IDiskDeviceOps
 
     private static unsafe bool? TryGetSeekPenaltyProperty(string physicalDrivePath)
     {
-        using SafeFileHandle handle = NativeMethods.CreateFileW(
-            physicalDrivePath,
-            0,
-            NativeMethods.FILE_SHARE_READ_WRITE,
-            IntPtr.Zero,
-            NativeMethods.OPEN_EXISTING,
-            0,
-            IntPtr.Zero);
-        if (handle.IsInvalid)
+        using SafeFileHandle? handle = TryOpenPhysicalDrive(physicalDrivePath, 0);
+        if (handle is null)
         {
             return null;
         }
@@ -870,15 +853,9 @@ public sealed class NativeDiskDeviceOps : IDiskDeviceOps
     private static unsafe bool SendAtaNoDataCommand(int diskNumber, byte command)
     {
         string path = $@"\\.\PhysicalDrive{diskNumber}";
-        using SafeFileHandle handle = NativeMethods.CreateFileW(
-            path,
-            NativeMethods.GENERIC_READ | NativeMethods.GENERIC_WRITE,
-            NativeMethods.FILE_SHARE_READ_WRITE,
-            IntPtr.Zero,
-            NativeMethods.OPEN_EXISTING,
-            0,
-            IntPtr.Zero);
-        if (handle.IsInvalid)
+        using SafeFileHandle? handle = TryOpenPhysicalDrive(
+            path, NativeMethods.GENERIC_READ | NativeMethods.GENERIC_WRITE);
+        if (handle is null)
         {
             return false;
         }
