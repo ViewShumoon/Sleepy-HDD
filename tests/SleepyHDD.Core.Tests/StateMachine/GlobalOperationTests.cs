@@ -37,8 +37,8 @@ public class GlobalOperationTests
         Assert.Equal(1, outcome.DiskNumber);
         Assert.True(outcome.Result.Success);
         Assert.False(fake.HasCall($"lock:{VolE}"));
-        Assert.Equal(DiskState.Sleeping, machine.GetState(1));
-        Assert.Equal(DiskState.Online, machine.GetState(2));
+        Assert.Equal(DiskState.Sleeping, machine.GetState("HDD1"));
+        Assert.Equal(DiskState.Online, machine.GetState("HDD2"));
     }
 
     [Fact]
@@ -66,9 +66,9 @@ public class GlobalOperationTests
         Assert.NotNull(failed.Message);
         Assert.Equal(new[] { "SearchIndexer.exe" }, failed.OccupyingProcesses);
         // 失败盘保持在线并回滚，成功盘照常进入休眠。
-        Assert.Equal(DiskState.Sleeping, machine.GetState(1));
-        Assert.Equal(DiskState.Online, machine.GetState(2));
-        Assert.Equal(DiskState.Sleeping, machine.GetState(3));
+        Assert.Equal(DiskState.Sleeping, machine.GetState("HDD1"));
+        Assert.Equal(DiskState.Online, machine.GetState("HDD2"));
+        Assert.Equal(DiskState.Sleeping, machine.GetState("HDD3"));
         Assert.Contains("record:HDD1:Sleeping", store.Calls);
         Assert.Contains("record:HDD3:Sleeping", store.Calls);
         Assert.DoesNotContain("record:HDD2:Sleeping", store.Calls);
@@ -93,9 +93,9 @@ public class GlobalOperationTests
         Assert.True(fake.HasCall("set-offline:1"));
         Assert.True(fake.HasCall("set-offline:2"));
         Assert.False(fake.HasCall("set-offline:3"));
-        Assert.Equal(DiskState.Offline, machine.GetState(1));
-        Assert.Equal(DiskState.Offline, machine.GetState(2));
-        Assert.Equal(DiskState.Online, machine.GetState(3));
+        Assert.Equal(DiskState.Offline, machine.GetState("HDD1"));
+        Assert.Equal(DiskState.Offline, machine.GetState("HDD2"));
+        Assert.Equal(DiskState.Online, machine.GetState("HDD3"));
     }
 
     [Fact]
@@ -118,8 +118,8 @@ public class GlobalOperationTests
         Assert.All(outcomes, outcome => Assert.True(outcome.Result.Success));
         Assert.True(fake.HasCall($"unlock:{VolD}"));
         Assert.True(fake.HasCall($"unlock:{VolE}"));
-        Assert.Equal(DiskState.Online, machine.GetState(1));
-        Assert.Equal(DiskState.Online, machine.GetState(2));
+        Assert.Equal(DiskState.Online, machine.GetState("HDD1"));
+        Assert.Equal(DiskState.Online, machine.GetState("HDD2"));
     }
 
     [Fact]

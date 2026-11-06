@@ -39,7 +39,7 @@ public class DiskStateMachineTests
                 "standby:1",
             },
             fake.Calls);
-        Assert.Equal(DiskState.Sleeping, machine.GetState(1));
+        Assert.Equal(DiskState.Sleeping, machine.GetState("HDD1"));
         Assert.Equal(new[] { "record:HDD1:Sleeping" }, store.Calls);
     }
 
@@ -69,7 +69,7 @@ public class DiskStateMachineTests
                 $"unlock:{VolD}",
             },
             fake.Calls);
-        Assert.Equal(DiskState.Online, machine.GetState(1));
+        Assert.Equal(DiskState.Online, machine.GetState("HDD1"));
         Assert.Empty(store.Calls);
     }
 
@@ -88,7 +88,7 @@ public class DiskStateMachineTests
 
         Assert.True(result.Success);
         Assert.Equal(new[] { $"unlock:{VolD}", $"unlock:{VolE}" }, fake.Calls);
-        Assert.Equal(DiskState.Online, machine.GetState(1));
+        Assert.Equal(DiskState.Online, machine.GetState("HDD1"));
         Assert.Equal(new[] { "record:HDD1:Sleeping", "forget:HDD1" }, store.Calls);
     }
 
@@ -169,7 +169,7 @@ public class DiskStateMachineTests
                 "set-offline:1",
             },
             fake.Calls);
-        Assert.Equal(DiskState.Offline, machine.GetState(1));
+        Assert.Equal(DiskState.Offline, machine.GetState("HDD1"));
         Assert.Equal(new[] { "record:HDD1:Offline" }, store.Calls);
     }
 
@@ -201,7 +201,7 @@ public class DiskStateMachineTests
                 $"unlock:{VolD}",
             },
             fake.Calls);
-        Assert.Equal(DiskState.Online, machine.GetState(1));
+        Assert.Equal(DiskState.Online, machine.GetState("HDD1"));
         Assert.Empty(store.Calls);
     }
 
@@ -221,7 +221,7 @@ public class DiskStateMachineTests
         Assert.True(result.Success);
         // 休眠→离线：保持锁定、绝不重复锁定/解锁，仅追加置离线属性。
         Assert.Equal(new[] { "set-offline:1" }, fake.Calls);
-        Assert.Equal(DiskState.Offline, machine.GetState(1));
+        Assert.Equal(DiskState.Offline, machine.GetState("HDD1"));
         Assert.Equal(new[] { "record:HDD1:Sleeping", "record:HDD1:Offline" }, store.Calls);
     }
 
@@ -242,7 +242,7 @@ public class DiskStateMachineTests
         Assert.False(result.Success);
         // 置属性失败：保持休眠态与卷锁，不回滚、不降级记录。
         Assert.Equal(new[] { "set-offline:1" }, fake.Calls);
-        Assert.Equal(DiskState.Sleeping, machine.GetState(1));
+        Assert.Equal(DiskState.Sleeping, machine.GetState("HDD1"));
         Assert.Equal(new[] { "record:HDD1:Sleeping" }, store.Calls);
     }
 
@@ -262,7 +262,7 @@ public class DiskStateMachineTests
         Assert.True(result.Success);
         // 离线→休眠：仅清离线属性，保持卷锁（不解锁、不重新停转）。
         Assert.Equal(new[] { "clear-offline:1" }, fake.Calls);
-        Assert.Equal(DiskState.Sleeping, machine.GetState(1));
+        Assert.Equal(DiskState.Sleeping, machine.GetState("HDD1"));
         Assert.Equal(new[] { "record:HDD1:Offline", "record:HDD1:Sleeping" }, store.Calls);
     }
 
@@ -282,7 +282,7 @@ public class DiskStateMachineTests
 
         Assert.False(result.Success);
         Assert.Equal(new[] { "clear-offline:1" }, fake.Calls);
-        Assert.Equal(DiskState.Offline, machine.GetState(1));
+        Assert.Equal(DiskState.Offline, machine.GetState("HDD1"));
         Assert.Equal(new[] { "record:HDD1:Offline" }, store.Calls);
     }
 
@@ -304,7 +304,7 @@ public class DiskStateMachineTests
         Assert.Equal(
             new[] { "clear-offline:1", $"unlock:{VolD}", $"unlock:{VolE}" },
             fake.Calls);
-        Assert.Equal(DiskState.Online, machine.GetState(1));
+        Assert.Equal(DiskState.Online, machine.GetState("HDD1"));
         Assert.Equal(new[] { "record:HDD1:Offline", "forget:HDD1" }, store.Calls);
     }
 
@@ -325,7 +325,7 @@ public class DiskStateMachineTests
         Assert.False(result.Success);
         // 清属性失败：中止唤醒，保持离线，不移除状态文件记录。
         Assert.Equal(new[] { "clear-offline:1" }, fake.Calls);
-        Assert.Equal(DiskState.Offline, machine.GetState(1));
+        Assert.Equal(DiskState.Offline, machine.GetState("HDD1"));
         Assert.Equal(new[] { "record:HDD1:Offline" }, store.Calls);
     }
 
@@ -355,6 +355,20 @@ public class DiskStateMachineTests
         machine.SleepAsync(TwoVolumeDisk()).GetAwaiter().GetResult();
 
         Assert.Equal(new[] { (1, DiskState.Sleeping) }, observed);
+    }
+
+    [Fact]
+    public void GetState_KeyedBySerial_SurvivesDiskNumberRenumber()
+    {
+        var fake = new FakeDiskDeviceOps();
+        var machine = new DiskStateMachine(fake, new FakeStateStore());
+
+        machine.SleepAsync(TwoVolumeDisk()).GetAwaiter().GetResult();
+
+        // 热插拔重枚举后同一块盘（序列号不变）拿到新盘号仍显示休眠；
+        // 另一块盘占用原盘号不会被误归属状态（DESIGN.md 2.7 按序列号匹配）。
+        Assert.Equal(DiskState.Sleeping, machine.GetState("HDD1"));
+        Assert.Equal(DiskState.Online, machine.GetState("HDD9"));
     }
 
     private static ManagedDisk TwoVolumeDisk() => Disk(

@@ -10,6 +10,8 @@ namespace SleepyHDD.Core.StateMachine;
 /// 休眠↔离线互转保持卷锁、只增减离线属性；离线唤醒先清属性（卷自动重新挂载）再解锁。
 /// 锁定失败则查询占用进程并回滚已锁卷。同一磁盘的操作经信号量串行，不同磁盘的操作并行执行。
 /// 全局操作（全部休眠/离线/唤醒）跳过受限盘、逐盘并行发起，单盘失败不影响其余盘。
+/// 软件视角状态以磁盘序列号为键（与状态文件同键，DESIGN.md 2.7）：热插拔后盘号可能重排，
+/// 序列号保证状态仍归属同一块盘。
 /// </summary>
 public sealed class DiskStateMachine
 {
@@ -17,7 +19,7 @@ public sealed class DiskStateMachine
     private readonly IStateStore _store;
     private readonly object _gate = new();
     private readonly Dictionary<int, SemaphoreSlim> _perDiskLocks = new();
-    private readonly Dictionary<int, DiskState> _states = new();
+    private readonly Dictionary<string, DiskState> _states = new(StringComparer.Ordinal);
 
     public DiskStateMachine(IDiskDeviceOps ops, IStateStore store)
     {
@@ -28,12 +30,12 @@ public sealed class DiskStateMachine
     /// <summary>磁盘状态变更事件（磁盘编号, 新状态）；可能在后台线程触发，订阅方需自行编组到 UI 线程。</summary>
     public event Action<int, DiskState>? StateChanged;
 
-    /// <summary>查询磁盘的软件视角状态；未在管理中记录过的默认在线。</summary>
-    public DiskState GetState(int diskNumber)
+    /// <summary>查询磁盘的软件视角状态；未在管理中记录过的默认在线。键与状态文件一致（序列号）。</summary>
+    public DiskState GetState(string serialNumber)
     {
         lock (_gate)
         {
-            return _states.TryGetValue(diskNumber, out var state) ? state : DiskState.Online;
+            return _states.TryGetValue(serialNumber, out var state) ? state : DiskState.Online;
         }
     }
 
@@ -112,7 +114,7 @@ public sealed class DiskStateMachine
 
     private Task<DiskOperationResult> SleepCoreAsync(ManagedDisk disk)
     {
-        DiskState current = GetState(disk.DiskNumber);
+        DiskState current = GetState(disk.SerialNumber);
         if (current == DiskState.Offline)
         {
             // 离线→休眠：仅清离线属性、保持卷锁；盘已停转，无需重新停转。
@@ -126,7 +128,7 @@ public sealed class DiskStateMachine
             }
 
             _store.Record(disk.SerialNumber, DiskState.Sleeping);
-            SetState(disk.DiskNumber, DiskState.Sleeping);
+            SetState(disk, DiskState.Sleeping);
             return Task.FromResult(new DiskOperationResult { Success = true });
         }
 
@@ -143,13 +145,13 @@ public sealed class DiskStateMachine
         }
 
         _store.Record(disk.SerialNumber, DiskState.Sleeping);
-        SetState(disk.DiskNumber, DiskState.Sleeping);
+        SetState(disk, DiskState.Sleeping);
         return Task.FromResult(new DiskOperationResult { Success = true });
     }
 
     private Task<DiskOperationResult> OfflineCoreAsync(ManagedDisk disk)
     {
-        DiskState current = GetState(disk.DiskNumber);
+        DiskState current = GetState(disk.SerialNumber);
         if (current == DiskState.Offline)
         {
             return Task.FromResult(new DiskOperationResult { Success = true }); // 幂等：已在离线。
@@ -188,13 +190,13 @@ public sealed class DiskStateMachine
         }
 
         _store.Record(disk.SerialNumber, DiskState.Offline);
-        SetState(disk.DiskNumber, DiskState.Offline);
+        SetState(disk, DiskState.Offline);
         return Task.FromResult(new DiskOperationResult { Success = true });
     }
 
     private Task<DiskOperationResult> WakeCoreAsync(ManagedDisk disk)
     {
-        if (GetState(disk.DiskNumber) == DiskState.Offline)
+        if (GetState(disk.SerialNumber) == DiskState.Offline)
         {
             // 离线→唤醒：先清离线属性，卷由系统自动重新挂载、盘符回来。
             if (!_ops.ClearDiskOffline(disk.DiskNumber))
@@ -213,7 +215,7 @@ public sealed class DiskStateMachine
         }
 
         _store.Forget(disk.SerialNumber);
-        SetState(disk.DiskNumber, DiskState.Online);
+        SetState(disk, DiskState.Online);
         return Task.FromResult(new DiskOperationResult { Success = true });
     }
 
@@ -284,13 +286,13 @@ public sealed class DiskStateMachine
         }
     }
 
-    private void SetState(int diskNumber, DiskState state)
+    private void SetState(ManagedDisk disk, DiskState state)
     {
         lock (_gate)
         {
-            _states[diskNumber] = state;
+            _states[disk.SerialNumber] = state;
         }
 
-        StateChanged?.Invoke(diskNumber, state);
+        StateChanged?.Invoke(disk.DiskNumber, state);
     }
 }

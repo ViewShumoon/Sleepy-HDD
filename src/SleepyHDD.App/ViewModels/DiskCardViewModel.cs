@@ -46,7 +46,7 @@ public sealed partial class DiskCardViewModel : ObservableObject
         RestrictedReasonsText = disk.IsRestricted
             ? string.Join("；", disk.RestrictedReasons.Select(Describe))
             : string.Empty;
-        _state = machine.GetState(disk.DiskNumber);
+        _state = machine.GetState(disk.SerialNumber);
     }
 
     /// <summary>磁盘型号。</summary>
