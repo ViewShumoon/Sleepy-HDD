@@ -19,7 +19,7 @@ namespace SleepyHDD.App
     {
         private readonly DeviceChangeWatcher _deviceWatcher;
 
-        /// <summary>组合根：App 层负责把 Native 设备实现注入 Core 磁盘清单与休眠状态机。</summary>
+        /// <summary>组合根：App 层负责把 Native 设备实现与设置/状态存储注入 Core 磁盘清单、休眠状态机与设置视图模型。</summary>
         public MainViewModel ViewModel { get; }
 
         public MainWindow()
@@ -27,7 +27,8 @@ namespace SleepyHDD.App
             InitializeComponent();
             var deviceOps = new NativeDiskDeviceOps();
             var machine = new DiskStateMachine(deviceOps, new FileStateStore());
-            ViewModel = new MainViewModel(new DiskInventory(deviceOps), machine);
+            var settings = new SettingsViewModel(new FileSettingsStore());
+            ViewModel = new MainViewModel(new DiskInventory(deviceOps), machine, settings);
             // WinUI 3 的 Window 没有 DataContext，绑定源设在内容根元素上。
             ((FrameworkElement)Content).DataContext = ViewModel;
             ViewModel.Refresh();

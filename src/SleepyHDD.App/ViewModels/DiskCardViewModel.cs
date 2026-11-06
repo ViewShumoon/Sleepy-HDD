@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Xaml.Media;
 using SleepyHDD.Core.Inventory;
 using SleepyHDD.Core.StateMachine;
+using SleepyHDD.Core.Store;
 
 // MVVMTK0045 推荐的 partial property 需 C# 14（.NET 9），本项目目标 net8.0-windows，只能沿用字段。
 #pragma warning disable MVVMTK0045
@@ -11,7 +12,7 @@ namespace SleepyHDD.App.ViewModels;
 
 /// <summary>
 /// 受管磁盘卡片展示项：受限盘仅以红字徽章说明原因、无任何动作按钮（DESIGN.md 4.1）；
-/// 正常盘按单按钮表动作（在线→默认动作[当前为休眠]，休眠/离线→唤醒），
+/// 正常盘按单按钮表动作（在线→默认动作[休眠/离线，随设置切换]，休眠/离线→唤醒），
 /// 徽章在线绿/休眠黄/离线灰（保护模式，tickets #4/#5）。
 /// </summary>
 public sealed partial class DiskCardViewModel : ObservableObject
@@ -25,11 +26,13 @@ public sealed partial class DiskCardViewModel : ObservableObject
 
     private readonly ManagedDisk _disk;
     private readonly DiskStateMachine _machine;
+    private readonly SettingsViewModel _settings;
 
-    public DiskCardViewModel(ManagedDisk disk, DiskStateMachine machine)
+    public DiskCardViewModel(ManagedDisk disk, DiskStateMachine machine, SettingsViewModel settings)
     {
         _disk = disk;
         _machine = machine;
+        _settings = settings;
         Model = disk.Model.Length > 0 ? disk.Model : $"磁盘 #{disk.DiskNumber}";
         CapacityText = ByteFormat.Format(disk.SizeBytes);
         Volumes = disk.Volumes
@@ -101,8 +104,11 @@ public sealed partial class DiskCardViewModel : ObservableObject
         _ => OnlineBadgeBrush,
     };
 
-    /// <summary>动作按钮文本：在线时"休眠"，否则"唤醒"。</summary>
-    public string ActionText => State == DiskState.Online ? "休眠" : "唤醒";
+    /// <summary>动作按钮文本：在线时显示默认动作（休眠/离线），否则"唤醒"。</summary>
+    public string ActionText => State == DiskState.Online ? _settings.DefaultActionName : "唤醒";
+
+    /// <summary>默认动作变化时由 MainViewModel 调用，刷新本卡片按钮文案。</summary>
+    public void NotifyDefaultActionChanged() => OnPropertyChanged(nameof(ActionText));
 
     /// <summary>有失败反馈时显示状态文本。</summary>
     public bool HasStatusMessage => StatusMessage.Length > 0;
@@ -118,7 +124,7 @@ public sealed partial class DiskCardViewModel : ObservableObject
 
     private bool CanToggle() => !IsBusy && !IsRestricted;
 
-    /// <summary>休眠/唤醒切换：在线→转休眠，休眠→唤醒；失败时展示占用进程报告。</summary>
+    /// <summary>单按钮切换：在线→默认动作（休眠/离线），休眠/离线→唤醒；失败时展示占用进程报告。</summary>
     [RelayCommand(CanExecute = nameof(CanToggle))]
     private async Task ToggleAsync()
     {
@@ -126,22 +132,32 @@ public sealed partial class DiskCardViewModel : ObservableObject
         StatusMessage = string.Empty;
         try
         {
-            DiskOperationResult result = State == DiskState.Online
-                ? await _machine.SleepAsync(_disk)
-                : await _machine.WakeAsync(_disk);
+            DiskOperationResult result = State switch
+            {
+                DiskState.Online when _settings.DefaultAction == DefaultAction.Sleep =>
+                    await _machine.SleepAsync(_disk),
+                DiskState.Online => await _machine.OfflineAsync(_disk),
+                _ => await _machine.WakeAsync(_disk),
+            };
 
             if (!result.Success)
             {
-                string occupants = result.OccupyingProcesses.Count > 0
-                    ? $" 占用进程：{string.Join("、", result.OccupyingProcesses)}"
-                    : string.Empty;
-                StatusMessage = $"{result.Message}{occupants}";
+                ReportFailure(result);
             }
         }
         finally
         {
             IsBusy = false;
         }
+    }
+
+    /// <summary>展示失败反馈（含占用进程列表）；全局操作失败时由 MainViewModel 路由到本卡片。</summary>
+    public void ReportFailure(DiskOperationResult result)
+    {
+        string occupants = result.OccupyingProcesses.Count > 0
+            ? $" 占用进程：{string.Join("、", result.OccupyingProcesses)}"
+            : string.Empty;
+        StatusMessage = $"{result.Message}{occupants}";
     }
 
     private static string Describe(RestrictedReason reason) => reason switch
