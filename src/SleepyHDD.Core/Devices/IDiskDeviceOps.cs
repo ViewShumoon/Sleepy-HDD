@@ -56,4 +56,15 @@ public interface IDiskDeviceOps
     /// false=不可用（含 Intel RST/RAID 模式），失败的盘不可安全停转。
     /// </summary>
     bool ProbeAtaPassThrough(int diskNumber);
+
+    /// <summary>
+    /// 经 IOCTL_DISK_SET_DISK_ATTRIBUTES 置 DISK_ATTRIBUTE_OFFLINE（保留其余属性位）；
+    /// 成功后该盘的卷从系统消失。离线属性本身不停转也不防唤醒，须与停转组合使用。
+    /// </summary>
+    bool SetDiskOffline(int diskNumber);
+
+    /// <summary>
+    /// 清除指定物理盘的 DISK_ATTRIBUTE_OFFLINE（保留其余属性位）；卷由系统自动重新挂载。
+    /// </summary>
+    bool ClearDiskOffline(int diskNumber);
 }

@@ -186,6 +186,65 @@ public sealed class NativeDiskDeviceOps : IDiskDeviceOps
         return TryRunAtaIdentifyDevice(path, identifyData);
     }
 
+    /// <inheritdoc />
+    public bool SetDiskOffline(int diskNumber) => TryModifyDiskOffline(diskNumber, offline: true);
+
+    /// <inheritdoc />
+    public bool ClearDiskOffline(int diskNumber) => TryModifyDiskOffline(diskNumber, offline: false);
+
+    /// <summary>
+    /// 读-改-写磁盘属性：GET_DISK_ATTRIBUTES 取当前 Attributes，仅翻转 OFFLINE 位
+    /// （保留 NO_DEFAULT_DRIVE_LETTER 等其余位），再 SET_DISK_ATTRIBUTES 写回；任一步失败返回 false。
+    /// </summary>
+    private static unsafe bool TryModifyDiskOffline(int diskNumber, bool offline)
+    {
+        string path = $@"\\.\PhysicalDrive{diskNumber}";
+        using SafeFileHandle handle = NativeMethods.CreateFileW(
+            path,
+            NativeMethods.GENERIC_READ | NativeMethods.GENERIC_WRITE,
+            NativeMethods.FILE_SHARE_READ_WRITE,
+            IntPtr.Zero,
+            NativeMethods.OPEN_EXISTING,
+            0,
+            IntPtr.Zero);
+        if (handle.IsInvalid)
+        {
+            return false;
+        }
+
+        NativeMethods.DISK_ATTRIBUTES* buffer = stackalloc NativeMethods.DISK_ATTRIBUTES[1];
+        buffer->Version = NativeMethods.DiskAttributesVersion;
+        buffer->AccessModes = NativeMethods.DiskAttributesAccessModes;
+        if (!NativeMethods.DeviceIoControl(
+                handle,
+                NativeMethods.IOCTL_DISK_GET_DISK_ATTRIBUTES,
+                (IntPtr)buffer,
+                (uint)sizeof(NativeMethods.DISK_ATTRIBUTES),
+                (IntPtr)buffer,
+                (uint)sizeof(NativeMethods.DISK_ATTRIBUTES),
+                out _,
+                IntPtr.Zero))
+        {
+            return false;
+        }
+
+        // GET 可能回写 Version/位域，SET 前按线格式复位。
+        buffer->Version = NativeMethods.DiskAttributesVersion;
+        buffer->AccessModes = NativeMethods.DiskAttributesAccessModes;
+        buffer->Attributes = offline
+            ? buffer->Attributes | NativeMethods.DiskAttributeOffline
+            : buffer->Attributes & ~NativeMethods.DiskAttributeOffline;
+        return NativeMethods.DeviceIoControl(
+            handle,
+            NativeMethods.IOCTL_DISK_SET_DISK_ATTRIBUTES,
+            (IntPtr)buffer,
+            (uint)sizeof(NativeMethods.DISK_ATTRIBUTES),
+            (IntPtr)buffer,
+            (uint)sizeof(NativeMethods.DISK_ATTRIBUTES),
+            out _,
+            IntPtr.Zero);
+    }
+
     private static string? QueryFixedPath(Func<StringBuilder, uint, uint> getter)
     {
         var buffer = new StringBuilder(261);

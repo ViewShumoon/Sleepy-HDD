@@ -41,6 +41,22 @@ public class FileStateStoreTests : IDisposable
     }
 
     [Fact]
+    public void Record_DistinguishesSleepingAndOfflinePerSerialAcrossReload()
+    {
+        var store = new FileStateStore(_path);
+
+        store.Record("SLEEPED1", DiskState.Sleeping);
+        store.Record("OFFLINE1", DiskState.Offline);
+
+        var entries = new FileStateStore(_path).Load();
+        Assert.Equal(DiskState.Sleeping, Assert.Contains("SLEEPED1", entries));
+        Assert.Equal(DiskState.Offline, Assert.Contains("OFFLINE1", entries));
+        string json = File.ReadAllText(_path);
+        Assert.Contains("Sleeping", json);
+        Assert.Contains("Offline", json);
+    }
+
+    [Fact]
     public void Forget_RemovesEntry()
     {
         var store = new FileStateStore(_path);

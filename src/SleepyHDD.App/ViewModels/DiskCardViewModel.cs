@@ -11,7 +11,8 @@ namespace SleepyHDD.App.ViewModels;
 
 /// <summary>
 /// 受管磁盘卡片展示项：受限盘仅以红字徽章说明原因、无任何动作按钮（DESIGN.md 4.1）；
-/// 正常盘支持"休眠/唤醒"动作与在线/休眠状态徽章（保护模式，ticket #4）。
+/// 正常盘按单按钮表动作（在线→默认动作[当前为休眠]，休眠/离线→唤醒），
+/// 徽章在线绿/休眠黄/离线灰（保护模式，tickets #4/#5）。
 /// </summary>
 public sealed partial class DiskCardViewModel : ObservableObject
 {

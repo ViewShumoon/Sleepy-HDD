@@ -75,7 +75,7 @@
                                         FontWeight="SemiBold"
                                         Text="{Binding Model}"
                                         TextTrimming="CharacterEllipsis" />
-                                    <!-- 状态徽章：在线（绿）/ 休眠（黄）；受限盘另显红字徽章 -->
+                                    <!-- 状态徽章：在线（绿）/ 休眠（黄）/ 离线（灰）；受限盘另显红字徽章 -->
                                     <Border
                                         HorizontalAlignment="Right"
                                         Padding="8,2"
