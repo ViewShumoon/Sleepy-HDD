@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "SleepyHDD.App (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "SleepyHDD.App (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
