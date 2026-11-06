@@ -75,17 +75,17 @@
                                         FontWeight="SemiBold"
                                         Text="{Binding Model}"
                                         TextTrimming="CharacterEllipsis" />
-                                    <!-- 状态徽章：在线（绿）/ 受限（红字说明，无动作按钮） -->
+                                    <!-- 状态徽章：在线（绿）/ 休眠（黄）；受限盘另显红字徽章 -->
                                     <Border
                                         HorizontalAlignment="Right"
                                         Padding="8,2"
-                                        Background="#2E7D32"
+                                        Background="{Binding BadgeBrush}"
                                         CornerRadius="4"
                                         Visibility="{Binding IsNotRestricted, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <TextBlock
                                             FontSize="12"
                                             Foreground="White"
-                                            Text="在线" />
+                                            Text="{Binding StateText}" />
                                     </Border>
                                     <Border
                                         HorizontalAlignment="Right"
@@ -121,6 +121,23 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
+                                <!-- 休眠/唤醒动作与失败反馈（占用进程报告）；受限盘无动作按钮 -->
+                                <Grid
+                                    Margin="0,10,0,0"
+                                    Visibility="{Binding IsNotRestricted, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <TextBlock
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
+                                        MaxWidth="360"
+                                        Foreground="#C62828"
+                                        Text="{Binding StatusMessage}"
+                                        TextWrapping="Wrap"
+                                        Visibility="{Binding HasStatusMessage, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                    <Button
+                                        HorizontalAlignment="Right"
+                                        Content="{Binding ActionText}"
+                                        Command="{Binding ToggleCommand}" />
+                                </Grid>
                             </StackPanel>
                         </Border>
                     </DataTemplate>

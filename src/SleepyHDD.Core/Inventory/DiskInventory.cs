@@ -133,6 +133,7 @@ public sealed class DiskInventory
 
             volumes.Add(new ManagedVolume
             {
+                VolumePath = volume.VolumePath,
                 DriveLetter = volume.DriveLetter,
                 Label = volume.Label,
                 TotalBytes = volume.TotalBytes,

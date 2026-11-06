@@ -3,6 +3,8 @@ using SleepyHDD.App.Devices;
 using WinRT.Interop;
 using SleepyHDD.App.ViewModels;
 using SleepyHDD.Core.Inventory;
+using SleepyHDD.Core.StateMachine;
+using SleepyHDD.Core.Store;
 using SleepyHDD.Native;
 
 // To learn more about WinUI, the WinUI project structure,
@@ -17,13 +19,15 @@ namespace SleepyHDD.App
     {
         private readonly DeviceChangeWatcher _deviceWatcher;
 
-        /// <summary>组合根：App 层负责把 Native 设备实现注入 Core 磁盘清单。</summary>
+        /// <summary>组合根：App 层负责把 Native 设备实现注入 Core 磁盘清单与休眠状态机。</summary>
         public MainViewModel ViewModel { get; }
 
         public MainWindow()
         {
             InitializeComponent();
-            ViewModel = new MainViewModel(new DiskInventory(new NativeDiskDeviceOps()));
+            var deviceOps = new NativeDiskDeviceOps();
+            var machine = new DiskStateMachine(deviceOps, new FileStateStore());
+            ViewModel = new MainViewModel(new DiskInventory(deviceOps), machine);
             // WinUI 3 的 Window 没有 DataContext，绑定源设在内容根元素上。
             ((FrameworkElement)Content).DataContext = ViewModel;
             ViewModel.Refresh();

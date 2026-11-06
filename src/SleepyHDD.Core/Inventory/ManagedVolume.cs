@@ -5,6 +5,9 @@ namespace SleepyHDD.Core.Inventory;
 /// </summary>
 public sealed record ManagedVolume
 {
+    /// <summary>卷路径，形如 \\?\Volume{guid}\，锁定/卸载/解锁以此为标识。</summary>
+    public required string VolumePath { get; init; }
+
     /// <summary>盘符字母（如 "D"）。</summary>
     public required string DriveLetter { get; init; }
 

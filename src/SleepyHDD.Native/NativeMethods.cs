@@ -22,6 +22,11 @@ internal static class NativeMethods
     /// <summary>CTL_CODE(FILE_DEVICE_CONTROLLER, 0x40C, BUFFERED, READ|WRITE)。</summary>
     public const uint IOCTL_ATA_PASS_THROUGH_DIRECT = 0x0004D030;
 
+    // FSCTL 卷控制码（CTL_CODE(FILE_DEVICE_FILE_SYSTEM=9, n, BUFFERED, ANY_ACCESS) 展开）。
+    public const uint FSCTL_LOCK_VOLUME = 0x00090018;
+    public const uint FSCTL_UNLOCK_VOLUME = 0x0009001C;
+    public const uint FSCTL_DISMOUNT_VOLUME = 0x00090020;
+
     // STORAGE_PROPERTY_ID 与查询类型。
     public const uint StorageDeviceProperty = 0;
     public const uint StorageDeviceSeekPenaltyProperty = 7;
@@ -43,6 +48,7 @@ internal static class NativeMethods
     public const uint GENERIC_READ = 0x80000000;
     public const uint GENERIC_WRITE = 0x40000000;
     public const uint FILE_SHARE_READ_WRITE = 0x3;
+    public const uint FILE_SHARE_DELETE = 0x4;
     public const uint OPEN_EXISTING = 3;
 
     // GetDriveTypeW 返回值。
@@ -52,8 +58,13 @@ internal static class NativeMethods
     /// <summary>STORAGE_DEVICE_NUMBER.DeviceType 中表示物理磁盘的 FILE_DEVICE_DISK。</summary>
     public const uint FILE_DEVICE_DISK = 7;
 
-    /// <summary>ATA IDENTIFY DEVICE 命令字节与目标设备位。</summary>
+    /// <summary>
+    /// ATA 命令字节：IDENTIFY DEVICE / CACHE FLUSH EXT / STANDBY IMMEDIATE。
+    /// 依 ADR-0001 停转只用 0xE0，绝不发送 SLEEP (0xE6)。
+    /// </summary>
     public const byte AtaCommandIdentifyDevice = 0xEC;
+    public const byte AtaCommandCacheFlushExt = 0xE7;
+    public const byte AtaCommandStandbyImmediate = 0xE0;
     public const byte AtaDeviceHeadA0 = 0xA0;
 
     /// <summary>ATA_FLAGS：向主机传数据 + DMA。</summary>
@@ -186,6 +197,68 @@ internal static class NativeMethods
         out ulong lpFreeBytesAvailable,
         out ulong lpTotalNumberOfBytes,
         out ulong lpTotalNumberOfFreeBytes);
+
+    // Restart Manager（rstrtmgr.dll）：列出占用卷的进程。
+    public const string Rstrtmgr = "rstrtmgr.dll";
+
+    /// <summary>RmStartSession 的会话密钥缓冲区字符数（CCH_RM_SESSION_KEY + 1）。</summary>
+    public const int RmSessionKeyBufferChars = 65;
+
+    /// <summary>RmGetList 首次调用返回的"需要更大缓冲"错误码。</summary>
+    public const int ErrorMoreData = 234;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RM_UNIQUE_PROCESS
+    {
+        public int dwProcessId;
+        public long ProcessStartTime;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct RM_PROCESS_INFO
+    {
+        public RM_UNIQUE_PROCESS Process;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+        public string strAppName;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
+        public string strServiceShortName;
+
+        public uint ApplicationType;
+        public uint AppStatus;
+        public uint TSSessionId;
+
+        [MarshalAs(UnmanagedType.Bool)]
+        public bool bBootable;
+    }
+
+    [DllImport(Rstrtmgr, CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern uint RmStartSession(
+        out uint pSessionHandle,
+        uint dwSessionFlags,
+        StringBuilder strSessionKey);
+
+    [DllImport(Rstrtmgr)]
+    public static extern uint RmEndSession(uint dwSessionHandle);
+
+    [DllImport(Rstrtmgr, CharSet = CharSet.Unicode)]
+    public static extern uint RmRegisterResources(
+        uint dwSessionHandle,
+        uint nFiles,
+        string[] rgsFilenames,
+        uint nApplications,
+        RM_UNIQUE_PROCESS[]? rgApplications,
+        uint nServices,
+        string[]? rgsServiceNames);
+
+    [DllImport(Rstrtmgr)]
+    public static extern uint RmGetList(
+        uint dwSessionHandle,
+        out uint pnProcInfoNeeded,
+        ref uint pnProcInfo,
+        [Out] RM_PROCESS_INFO[]? rgAffectedApps,
+        out uint lpdwRebootReasons);
 
     [DllImport(Kernel32, SetLastError = true, CharSet = CharSet.Unicode)]
     public static extern uint GetSystemDirectoryW(StringBuilder lpBuffer, uint uSize);
