@@ -6,10 +6,18 @@ namespace SleepyHDD.Native;
 
 /// <summary>
 /// IDiskDeviceOps 的 Win32 实现：探测 \\.\PhysicalDriveN 并 IOCTL 查询属性与 ATA pass-through、
-/// Win32 卷 API 枚举卷。单个设备查询失败时跳过该设备（或降级字段）而非抛出。
+/// Win32 卷 API 枚举卷、FSCTL 卷锁定/卸载/解锁、Restart Manager 占用查询。
+/// 单个设备查询失败时跳过该设备（或降级字段）而非抛出。
 /// </summary>
 public sealed class NativeDiskDeviceOps : IDiskDeviceOps
 {
+    /// <summary>
+    /// FSCTL_LOCK_VOLUME 的锁绑定到打开卷的句柄：句柄必须保持到 UnlockVolume，
+    /// 因此以卷路径（去尾部反斜杠）为键保存锁句柄。
+    /// </summary>
+    private readonly object _locksGate = new();
+    private readonly Dictionary<string, SafeFileHandle> _volumeLocks = new(StringComparer.OrdinalIgnoreCase);
+
     /// <inheritdoc />
     public IReadOnlyList<DiskDescriptor> EnumerateDisks()
     {
@@ -391,5 +399,224 @@ public sealed class NativeDiskDeviceOps : IDiskDeviceOps
         }
 
         return ((long)total, (long)freeAvailable);
+    }
+
+    /// <inheritdoc />
+    public bool LockVolume(string volumePath)
+    {
+        string key = volumePath.TrimEnd('\\');
+        SafeFileHandle handle = NativeMethods.CreateFileW(
+            key,
+            NativeMethods.GENERIC_READ | NativeMethods.GENERIC_WRITE,
+            NativeMethods.FILE_SHARE_READ_WRITE | NativeMethods.FILE_SHARE_DELETE,
+            IntPtr.Zero,
+            NativeMethods.OPEN_EXISTING,
+            0,
+            IntPtr.Zero);
+        if (handle.IsInvalid)
+        {
+            handle.Dispose();
+            return false;
+        }
+
+        // 卷上存在打开句柄时锁定失败：同步重试约 3 秒（接口契约）。
+        long deadline = Environment.TickCount64 + 3000;
+        while (!NativeMethods.DeviceIoControl(
+                   handle,
+                   NativeMethods.FSCTL_LOCK_VOLUME,
+                   IntPtr.Zero,
+                   0,
+                   IntPtr.Zero,
+                   0,
+                   out _,
+                   IntPtr.Zero))
+        {
+            if (Environment.TickCount64 >= deadline)
+            {
+                handle.Dispose();
+                return false;
+            }
+
+            Thread.Sleep(100);
+        }
+
+        lock (_locksGate)
+        {
+            if (_volumeLocks.TryGetValue(key, out SafeFileHandle? stale))
+            {
+                stale.Dispose();
+            }
+
+            _volumeLocks[key] = handle;
+        }
+
+        return true;
+    }
+
+    /// <inheritdoc />
+    public bool DismountVolume(string volumePath)
+    {
+        SafeFileHandle? handle = FindLockHandle(volumePath);
+        if (handle is null)
+        {
+            return false;
+        }
+
+        return NativeMethods.DeviceIoControl(
+            handle,
+            NativeMethods.FSCTL_DISMOUNT_VOLUME,
+            IntPtr.Zero,
+            0,
+            IntPtr.Zero,
+            0,
+            out _,
+            IntPtr.Zero);
+    }
+
+    /// <inheritdoc />
+    public bool UnlockVolume(string volumePath)
+    {
+        string key = volumePath.TrimEnd('\\');
+        SafeFileHandle? handle;
+        lock (_locksGate)
+        {
+            if (!_volumeLocks.TryGetValue(key, out handle))
+            {
+                return true; // 未锁定时为无害空操作。
+            }
+
+            _volumeLocks.Remove(key);
+        }
+
+        try
+        {
+            return NativeMethods.DeviceIoControl(
+                handle,
+                NativeMethods.FSCTL_UNLOCK_VOLUME,
+                IntPtr.Zero,
+                0,
+                IntPtr.Zero,
+                0,
+                out _,
+                IntPtr.Zero);
+        }
+        finally
+        {
+            // 卷已卸载时 IOCTL 可能失败，但释放句柄本身即释放锁。
+            handle.Dispose();
+        }
+    }
+
+    /// <inheritdoc />
+    public bool FlushWriteCache(int diskNumber) =>
+        SendAtaNoDataCommand(diskNumber, NativeMethods.AtaCommandCacheFlushExt);
+
+    /// <inheritdoc />
+    public bool StandbyImmediate(int diskNumber) =>
+        SendAtaNoDataCommand(diskNumber, NativeMethods.AtaCommandStandbyImmediate);
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> GetOccupyingProcesses(string volumePath)
+    {
+        // best-effort：Restart Manager 注册目录/卷路径可能被拒绝（实测 ERROR_ACCESS_DENIED），
+        // 任一步失败都返回空列表，不影响锁定失败的回滚主流程。
+        if (NativeMethods.RmStartSession(out uint session, 0, new StringBuilder(NativeMethods.RmSessionKeyBufferChars)) != 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        try
+        {
+            if (NativeMethods.RmRegisterResources(session, 1, new[] { volumePath }, 0, null, 0, null) != 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            uint needed = 0;
+            uint count = 0;
+            uint result = NativeMethods.RmGetList(session, out needed, ref count, null, out _);
+            if (result == 0)
+            {
+                return Array.Empty<string>(); // ERROR_SUCCESS 且无占用者。
+            }
+
+            if (result != NativeMethods.ErrorMoreData || needed == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            var infos = new NativeMethods.RM_PROCESS_INFO[needed];
+            count = needed;
+            if (NativeMethods.RmGetList(session, out needed, ref count, infos, out _) != 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            var names = new List<string>((int)count);
+            for (int i = 0; i < count; i++)
+            {
+                string name = infos[i].strAppName;
+                if (name.Length > 0)
+                {
+                    names.Add(name);
+                }
+            }
+
+            return names;
+        }
+        finally
+        {
+            NativeMethods.RmEndSession(session);
+        }
+    }
+
+    private SafeFileHandle? FindLockHandle(string volumePath)
+    {
+        lock (_locksGate)
+        {
+            return _volumeLocks.TryGetValue(volumePath.TrimEnd('\\'), out SafeFileHandle? handle)
+                ? handle
+                : null;
+        }
+    }
+
+    /// <summary>
+    /// 经 ATA pass-through 向物理盘发送无数据传输的命令（0xE7/0xE0）。
+    /// 依 ADR-0001 停转只用 STANDBY IMMEDIATE，绝不发送 SLEEP (0xE6)。
+    /// </summary>
+    private static unsafe bool SendAtaNoDataCommand(int diskNumber, byte command)
+    {
+        string path = $@"\\.\PhysicalDrive{diskNumber}";
+        using SafeFileHandle handle = NativeMethods.CreateFileW(
+            path,
+            NativeMethods.GENERIC_READ | NativeMethods.GENERIC_WRITE,
+            NativeMethods.FILE_SHARE_READ_WRITE,
+            IntPtr.Zero,
+            NativeMethods.OPEN_EXISTING,
+            0,
+            IntPtr.Zero);
+        if (handle.IsInvalid)
+        {
+            return false;
+        }
+
+        var passthrough = default(NativeMethods.ATA_PASS_THROUGH_DIRECT);
+        passthrough.Length = (ushort)sizeof(NativeMethods.ATA_PASS_THROUGH_DIRECT);
+        passthrough.AtaFlags = 0; // 无数据传输。
+        passthrough.DataTransferLength = 0;
+        passthrough.TimeOutValue = 5;
+        passthrough.DataBuffer = IntPtr.Zero;
+        passthrough.CurrentTaskFile[5] = NativeMethods.AtaDeviceHeadA0;
+        passthrough.CurrentTaskFile[6] = command;
+
+        return NativeMethods.DeviceIoControl(
+            handle,
+            NativeMethods.IOCTL_ATA_PASS_THROUGH_DIRECT,
+            (IntPtr)(&passthrough),
+            (uint)sizeof(NativeMethods.ATA_PASS_THROUGH_DIRECT),
+            (IntPtr)(&passthrough),
+            (uint)sizeof(NativeMethods.ATA_PASS_THROUGH_DIRECT),
+            out _,
+            IntPtr.Zero);
     }
 }
