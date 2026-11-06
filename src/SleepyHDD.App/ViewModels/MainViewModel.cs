@@ -103,6 +103,9 @@ public sealed partial class MainViewModel : ObservableObject
         _hasRefreshed = true;
         _managedDisks = disks;
 
+        // 定时策略行按最新快照标记磁盘缺失/受限异常状态（票 #10）。
+        _settings.UpdateDisks(disks);
+
         Disks.Clear();
         foreach (var disk in disks)
         {

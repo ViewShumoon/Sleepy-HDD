@@ -14,9 +14,53 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid Padding="24,20,24,24">
+    <Grid x:Name="RootGrid" Padding="24,20,24,24">
         <Grid.Resources>
             <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+            <!-- 新增定时策略对话框（票 #10，DESIGN.md 4.2）：磁盘、时间、星期、目标状态；由 code-behind 打开 -->
+            <ContentDialog
+                x:Key="AddScheduleDialog"
+                Title="新增定时策略"
+                PrimaryButtonText="保存"
+                CloseButtonText="取消"
+                DefaultButton="Primary"
+                IsPrimaryButtonEnabled="{Binding CanAddSchedule}">
+                <StackPanel MinWidth="340" Spacing="12">
+                    <ComboBox
+                        HorizontalAlignment="Stretch"
+                        Header="磁盘"
+                        ItemsSource="{Binding DialogDisks}"
+                        SelectedItem="{Binding DialogDisk, Mode=TwoWay}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TimePicker
+                        HorizontalAlignment="Stretch"
+                        Header="触发时间"
+                        Time="{Binding DialogTime, Mode=TwoWay}" />
+                    <TextBlock Text="重复星期" />
+                    <StackPanel Orientation="Horizontal" Spacing="16">
+                        <CheckBox Content="周一" IsChecked="{Binding IsMonday, Mode=TwoWay}" />
+                        <CheckBox Content="周二" IsChecked="{Binding IsTuesday, Mode=TwoWay}" />
+                        <CheckBox Content="周三" IsChecked="{Binding IsWednesday, Mode=TwoWay}" />
+                        <CheckBox Content="周四" IsChecked="{Binding IsThursday, Mode=TwoWay}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="16">
+                        <CheckBox Content="周五" IsChecked="{Binding IsFriday, Mode=TwoWay}" />
+                        <CheckBox Content="周六" IsChecked="{Binding IsSaturday, Mode=TwoWay}" />
+                        <CheckBox Content="周日" IsChecked="{Binding IsSunday, Mode=TwoWay}" />
+                    </StackPanel>
+                    <RadioButtons
+                        Header="目标状态"
+                        SelectedIndex="{Binding DialogTargetIndex, Mode=TwoWay}">
+                        <x:String>休眠</x:String>
+                        <x:String>离线</x:String>
+                    </RadioButtons>
+                </StackPanel>
+            </ContentDialog>
         </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -161,7 +205,7 @@
                 </ScrollViewer>
             </Grid>
 
-            <!-- 设置页：默认动作 + 开机自启（DESIGN.md 4.2）；定时策略/关于属其他票 -->
+            <!-- 设置页：默认动作 + 开机自启 + 定时策略（DESIGN.md 4.2）；关于属其他票 -->
             <StackPanel
                 MaxWidth="520"
                 HorizontalAlignment="Left"
@@ -193,6 +237,53 @@
                     IsOn="{Binding Settings.AutoStartEnabled, Mode=TwoWay}"
                     OnContent="开"
                     OffContent="关" />
+
+                <!-- 定时策略：列表 + 新增对话框 + 删除（票 #10，DESIGN.md 4.2）；磁盘缺失/受限时行内红字标记异常状态 -->
+                <TextBlock
+                    Margin="0,16,0,0"
+                    FontSize="16"
+                    FontWeight="SemiBold"
+                    Text="定时策略" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="在指定星期与时刻把指定磁盘转入指定状态；锁不住则跳过本次并托盘通知，不重试。"
+                    TextWrapping="Wrap" />
+                <ItemsControl Margin="0,4,0,0" ItemsSource="{Binding Settings.Schedules}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border
+                                Margin="0,4"
+                                Padding="12,8"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6">
+                                <Grid>
+                                    <StackPanel Spacing="2">
+                                        <TextBlock FontWeight="SemiBold">
+                                            <Run Text="{Binding DiskLabel}" /><Run Text=" · " /><Run Text="{Binding TimeText}" /><Run Text=" · " /><Run Text="{Binding DaysText}" /><Run Text=" → " /><Run Text="{Binding TargetText}" />
+                                        </TextBlock>
+                                        <TextBlock
+                                            Foreground="#C62828"
+                                            Text="{Binding ProblemText}"
+                                            Visibility="{Binding HasProblem, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                    </StackPanel>
+                                    <Button
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        Content="删除"
+                                        Command="{Binding DeleteCommand}" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button
+                    Margin="0,4,0,0"
+                    HorizontalAlignment="Left"
+                    Content="新增策略"
+                    Click="OnAddScheduleClick" />
+
                 <Button
                     Margin="0,16,0,0"
                     HorizontalAlignment="Left"
