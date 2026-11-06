@@ -108,7 +108,7 @@ public sealed partial class DiskCardViewModel : ObservableObject
     };
 
     /// <summary>动作按钮文本：在线时显示默认动作（休眠/离线），否则"唤醒"。</summary>
-    public string ActionText => State == DiskState.Online ? _settings.DefaultActionName : "唤醒";
+    public string ActionText => State.ToToggleLabel(_settings.DefaultAction);
 
     /// <summary>默认动作变化时由 MainViewModel 调用，刷新本卡片按钮文案。</summary>
     public void NotifyDefaultActionChanged() => OnPropertyChanged(nameof(ActionText));
@@ -135,13 +135,8 @@ public sealed partial class DiskCardViewModel : ObservableObject
         StatusMessage = string.Empty;
         try
         {
-            DiskOperationResult result = State switch
-            {
-                DiskState.Online when _settings.DefaultAction == DefaultAction.Sleep =>
-                    await _machine.SleepAsync(_disk),
-                DiskState.Online => await _machine.OfflineAsync(_disk),
-                _ => await _machine.WakeAsync(_disk),
-            };
+            DiskOperationResult result =
+                await State.RunToggleAsync(_machine, _disk, _settings.DefaultAction);
 
             if (!result.Success)
             {

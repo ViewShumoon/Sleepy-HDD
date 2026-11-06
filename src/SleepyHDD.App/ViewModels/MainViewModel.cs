@@ -58,7 +58,7 @@ public sealed partial class MainViewModel : ObservableObject
     public bool HasDisks => Disks.Count > 0;
 
     /// <summary>顶栏全局动作按钮文案：跟随默认动作设置。</summary>
-    public string SleepAllLabel => _settings.DefaultAction == DefaultAction.Sleep ? "全部休眠" : "全部离线";
+    public string SleepAllLabel => _settings.DefaultAction.ToAllActionLabel();
 
     /// <summary>关于页版本号：取自本程序集版本（DESIGN.md 4.2）。</summary>
     public string AppVersion { get; } =
@@ -132,9 +132,7 @@ public sealed partial class MainViewModel : ObservableObject
         IsGlobalBusy = true;
         try
         {
-            var outcomes = _settings.DefaultAction == DefaultAction.Sleep
-                ? await _machine.SleepAllAsync(_managedDisks)
-                : await _machine.OfflineAllAsync(_managedDisks);
+            var outcomes = await _settings.DefaultAction.RunAllAsync(_machine, _managedDisks);
             ReportOutcomes(outcomes);
         }
         finally

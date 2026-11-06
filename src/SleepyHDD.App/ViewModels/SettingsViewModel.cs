@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using SleepyHDD.Core.AutoStart;
 using SleepyHDD.Core.Inventory;
 using SleepyHDD.Core.Scheduler;
+using SleepyHDD.Core.StateMachine;
 using SleepyHDD.Core.Store;
 
 // MVVMTK0045 推荐的 partial property 需 C# 14（.NET 9），本项目目标 net8.0-windows，只能沿用字段。
@@ -65,7 +66,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     /// <summary>默认动作文案：休眠/离线（磁盘卡片动作按钮文本用）。</summary>
-    public string DefaultActionName => DefaultAction == DefaultAction.Sleep ? "休眠" : "离线";
+    public string DefaultActionName => DefaultAction.ToActionLabel();
 
     /// <summary>
     /// 开机自动启动开关（票 #11，默认关）：开→注册任务计划程序任务（登录触发 + 最高权限），

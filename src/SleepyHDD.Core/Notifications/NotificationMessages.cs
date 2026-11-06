@@ -30,7 +30,7 @@ public static class NotificationMessages
     public static NotificationMessage ScheduleSucceeded(string model, ScheduleTargetState target) =>
         new(
             "定时任务完成",
-            $"{model} 已按计划转入{(target == ScheduleTargetState.Sleep ? "休眠" : "离线")}。");
+            $"{model} 已按计划转入{target.ToTargetLabel()}。");
 
     /// <summary>定时任务跳过通知：磁盘消失/受限等原因导致本次不执行，不重试。</summary>
     public static NotificationMessage ScheduleSkipped(string diskLabel, string reason) =>

@@ -24,9 +24,7 @@ public static class TrayMenuBuilder
                 continue;
             }
 
-            string action = disk.State == DiskState.Online
-                ? (defaultAction == DefaultAction.Sleep ? "休眠" : "离线")
-                : "唤醒";
+            string action = disk.State.ToToggleLabel(defaultAction);
             items.Add(new TrayMenuItemModel($"{disk.Model}：{action}", IsEnabled: true, disk.DiskNumber));
         }
 
@@ -35,7 +33,7 @@ public static class TrayMenuBuilder
 
     /// <summary>全局休眠按钮文案：跟随默认动作（与主窗口顶栏同一措辞）。</summary>
     public static string SleepAllLabel(DefaultAction defaultAction) =>
-        defaultAction == DefaultAction.Sleep ? "全部休眠" : "全部离线";
+        defaultAction.ToAllActionLabel();
 
     /// <summary>托盘图标变体选择：任一磁盘休眠/离线即"睡眠"变体。</summary>
     public static TrayIconVariant SelectIconVariant(IEnumerable<TrayDiskEntry> disks) =>

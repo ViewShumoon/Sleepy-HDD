@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using SleepyHDD.Core.Inventory;
 using SleepyHDD.Core.Scheduler;
+using SleepyHDD.Core.StateMachine;
 
 // MVVMTK0045 推荐的 partial property 需 C# 14（.NET 9），本项目目标 net8.0-windows，只能沿用字段。
 #pragma warning disable MVVMTK0045
@@ -31,7 +32,7 @@ public sealed partial class ScheduleRowViewModel : ObservableObject
         DiskLabel = schedule.SerialNumber;
         TimeText = schedule.At.ToString("HH:mm");
         DaysText = FormatDays(schedule.Days);
-        TargetText = schedule.Target == ScheduleTargetState.Sleep ? "休眠" : "离线";
+        TargetText = schedule.Target.ToTargetLabel();
     }
 
     /// <summary>持久化的策略本体。</summary>

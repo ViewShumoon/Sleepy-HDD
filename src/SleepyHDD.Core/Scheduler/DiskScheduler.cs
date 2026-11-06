@@ -120,9 +120,7 @@ public sealed class DiskScheduler : IDisposable
         }
 
         // 状态机经信号量保证同盘串行：与用户手动操作并发时自动排队，流程一致。
-        var result = (schedule.Target == ScheduleTargetState.Sleep
-            ? _machine.SleepAsync(disk)
-            : _machine.OfflineAsync(disk)).GetAwaiter().GetResult();
+        var result = schedule.Target.RunAsync(_machine, disk).GetAwaiter().GetResult();
 
         Notified?.Invoke(result.Success
             ? NotificationMessages.ScheduleSucceeded(disk.Model, schedule.Target)
