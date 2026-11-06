@@ -60,6 +60,10 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>顶栏全局动作按钮文案：跟随默认动作设置。</summary>
     public string SleepAllLabel => _settings.DefaultAction == DefaultAction.Sleep ? "全部休眠" : "全部离线";
 
+    /// <summary>关于页版本号：取自本程序集版本（DESIGN.md 4.2）。</summary>
+    public string AppVersion { get; } =
+        typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
+
     /// <summary>顶栏标题：磁盘列表为"受管磁盘"，设置页为"设置"。</summary>
     public string HeaderText => ShowSettings ? "设置" : "受管磁盘";
 
