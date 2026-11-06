@@ -1,13 +1,16 @@
+using System.Diagnostics;
 using Microsoft.UI.Xaml;
 using SleepyHDD.App.Devices;
 using WinRT.Interop;
 using SleepyHDD.App.Tray;
 using SleepyHDD.App.ViewModels;
+using SleepyHDD.Core.AutoStart;
 using SleepyHDD.Core.Inventory;
 using SleepyHDD.Core.Lifecycle;
 using SleepyHDD.Core.StateMachine;
 using SleepyHDD.Core.Store;
 using SleepyHDD.Native;
+using SleepyHDD.Native.AutoStart;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -33,7 +36,17 @@ namespace SleepyHDD.App
             var stateStore = new FileStateStore();
             var machine = new DiskStateMachine(deviceOps, stateStore);
             var lifecycle = new DiskLifecycle(deviceOps, stateStore);
-            var settings = new SettingsViewModel(new FileSettingsStore());
+            var settingsStore = new FileSettingsStore();
+
+            // 开机自启（票 #11，DESIGN.md 2.8）：启动校准——开关为开时以当前 exe 路径重注册任务
+            // （应用被移动后自愈），为关时清理残留任务；ReconcileOnStartup 内部吞异常、不阻塞启动。
+            string exePath = Environment.ProcessPath
+                ?? Process.GetCurrentProcess().MainModule?.FileName
+                ?? throw new InvalidOperationException("无法确定当前可执行文件路径。");
+            var autoStart = new AutoStartService(settingsStore, new TaskSchedulerAutoStartRegistrar(), exePath);
+            autoStart.ReconcileOnStartup();
+
+            var settings = new SettingsViewModel(settingsStore, autoStart);
             ViewModel = new MainViewModel(new DiskInventory(deviceOps), machine, settings);
 
             // 生命周期启动恢复（票 #9，ADR-0005）：按序列号匹配，为在案且仍离线的盘清障、

@@ -161,7 +161,7 @@
                 </ScrollViewer>
             </Grid>
 
-            <!-- 设置页：本票仅默认动作（DESIGN.md 4.2）；定时策略/开机自启/关于属其他票 -->
+            <!-- 设置页：默认动作 + 开机自启（DESIGN.md 4.2）；定时策略/关于属其他票 -->
             <StackPanel
                 MaxWidth="520"
                 HorizontalAlignment="Left"
@@ -179,6 +179,20 @@
                     <x:String>休眠</x:String>
                     <x:String>离线</x:String>
                 </RadioButtons>
+                <!-- 开机自启开关（票 #11）：注册/注销登录触发 + 最高权限的任务计划程序任务 -->
+                <TextBlock
+                    Margin="0,16,0,0"
+                    FontSize="16"
+                    FontWeight="SemiBold"
+                    Text="开机自动启动" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="登录后由任务计划程序以最高权限自动运行 Sleepy HDD，使定时策略在重启后继续生效。"
+                    TextWrapping="Wrap" />
+                <ToggleSwitch
+                    IsOn="{Binding Settings.AutoStartEnabled, Mode=TwoWay}"
+                    OnContent="开"
+                    OffContent="关" />
                 <Button
                     Margin="0,16,0,0"
                     HorizontalAlignment="Left"
