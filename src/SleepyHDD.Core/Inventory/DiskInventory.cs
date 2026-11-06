@@ -90,6 +90,11 @@ public sealed class DiskInventory
             reasons.Add(RestrictedReason.Pagefile);
         }
 
+        if (_deviceOps.IsDynamicOrSpacesMember(disk.DiskNumber))
+        {
+            reasons.Add(RestrictedReason.DynamicOrSpacesMember);
+        }
+
         return reasons;
     }
 

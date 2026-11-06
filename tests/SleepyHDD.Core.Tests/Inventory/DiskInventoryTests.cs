@@ -448,6 +448,100 @@ public class DiskInventoryTests
         Assert.False(plain.IsRestricted);
     }
 
+    [Fact]
+    public void AtaPassThroughProbeFailure_IsRestrictedWithAtaReason()
+    {
+        var fake = new FakeDiskDeviceOps
+        {
+            Disks =
+            {
+                Descriptor(1, "Disk1"),
+                Descriptor(2, "Disk2"),
+            },
+        };
+        fake.Penalties[1] = true;
+        fake.Penalties[2] = true;
+        fake.AtaProbes[2] = false;
+
+        var disks = new DiskInventory(fake).EnumerateManagedDisks();
+
+        var raid = disks.Single(d => d.DiskNumber == 2);
+        Assert.True(raid.IsRestricted);
+        Assert.Equal(new[] { RestrictedReason.AtaPassThroughUnavailable }, raid.RestrictedReasons);
+        var healthy = disks.Single(d => d.DiskNumber == 1);
+        Assert.False(healthy.IsRestricted);
+    }
+
+    [Fact]
+    public void MultipleRestrictedReasons_AreOrderedByPriority()
+    {
+        var fake = new FakeDiskDeviceOps
+        {
+            Disks = { Descriptor(0, "Disk0") },
+            Volumes =
+            {
+                new VolumeDescriptor
+                {
+                    VolumePath = @"\\?\Volume{all}\",
+                    DiskNumber = 0,
+                    DriveLetter = "C",
+                    TotalBytes = 200_000_000_000,
+                    FreeBytes = 100_000_000_000,
+                },
+            },
+            BootSystemDriveLetters = { "C" },
+            PagefilePaths = { @"C:\pagefile.sys" },
+        };
+        fake.Penalties[0] = true;
+        fake.DynamicOrSpacesDisks.Add(0);
+        fake.AtaProbes[0] = false;
+
+        var disks = new DiskInventory(fake).EnumerateManagedDisks();
+
+        var disk = Assert.Single(disks);
+        Assert.Equal(
+            new[]
+            {
+                RestrictedReason.BootOrSystemVolume,
+                RestrictedReason.Pagefile,
+                RestrictedReason.DynamicOrSpacesMember,
+                RestrictedReason.AtaPassThroughUnavailable,
+            },
+            disk.RestrictedReasons);
+        Assert.Equal(RestrictedReason.BootOrSystemVolume, disk.PrimaryRestrictedReason);
+    }
+
+    [Fact]
+    public void AtaFailureAndPagefile_PrimaryIsPagefile()
+    {
+        var fake = new FakeDiskDeviceOps
+        {
+            Disks = { Descriptor(1, "Disk1") },
+            Volumes =
+            {
+                new VolumeDescriptor
+                {
+                    VolumePath = @"\\?\Volume{data}\",
+                    DiskNumber = 1,
+                    DriveLetter = "D",
+                    TotalBytes = 500_000_000_000,
+                    FreeBytes = 400_000_000_000,
+                },
+            },
+            PagefilePaths = { @"D:\pagefile.sys" },
+        };
+        fake.Penalties[1] = true;
+        fake.AtaProbes[1] = false;
+
+        var disks = new DiskInventory(fake).EnumerateManagedDisks();
+
+        var disk = Assert.Single(disks);
+        Assert.Equal(
+            new[] { RestrictedReason.Pagefile, RestrictedReason.AtaPassThroughUnavailable },
+            disk.RestrictedReasons);
+        Assert.Equal(RestrictedReason.Pagefile, disk.PrimaryRestrictedReason);
+    }
+
     private static DiskDescriptor Descriptor(int number, string model) => new()
     {
         DiskNumber = number,
