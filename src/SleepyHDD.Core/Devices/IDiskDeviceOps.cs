@@ -27,6 +27,12 @@ public interface IDiskDeviceOps
     /// <summary>解锁卷（FSCTL_UNLOCK_VOLUME）并释放锁句柄；对未锁定的卷为无害空操作。</summary>
     bool UnlockVolume(string volumePath);
 
+    /// <summary>
+    /// 唤醒后的轻量预读（DESIGN.md 2.5）：打开卷句柄读开头少量字节触发起转，
+    /// 让起转发生在用户点击时而非首次访问时；尽力而为，失败返回 false。
+    /// </summary>
+    bool PreReadVolume(string volumePath);
+
     /// <summary>经 ATA pass-through 向物理盘发送 CACHE FLUSH (0xE7)，同步等待完成。</summary>
     bool FlushWriteCache(int diskNumber);
 

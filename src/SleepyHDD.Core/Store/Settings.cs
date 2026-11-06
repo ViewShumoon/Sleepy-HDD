@@ -13,6 +13,9 @@ public sealed record Settings
     /// <summary>开机自动启动开关（票 #11）；未设置时为关。实际注册状态由 AutoStartService 校准。</summary>
     public bool AutoStartEnabled { get; init; }
 
+    /// <summary>唤醒后对刚解锁的卷发一次轻量预读触发起转（DESIGN.md 2.5）；未设置时默认开。</summary>
+    public bool WakePreReadEnabled { get; init; } = true;
+
     /// <summary>定时策略列表；旧文件缺失该字段时为空列表。</summary>
     public List<DiskSchedule> Schedules { get; init; } = new();
 }

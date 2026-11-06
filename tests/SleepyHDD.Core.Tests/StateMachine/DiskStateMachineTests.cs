@@ -1,6 +1,7 @@
 using SleepyHDD.Core.Devices;
 using SleepyHDD.Core.Inventory;
 using SleepyHDD.Core.StateMachine;
+using SleepyHDD.Core.Store;
 using SleepyHDD.Core.Tests.Fakes;
 
 // 本组测试刻意以阻塞方式取回 Task 结果，以便同步断言调用序列与并发/串行语义。
@@ -87,9 +88,49 @@ public class DiskStateMachineTests
         var result = machine.WakeAsync(disk).GetAwaiter().GetResult();
 
         Assert.True(result.Success);
-        Assert.Equal(new[] { $"unlock:{VolD}", $"unlock:{VolE}" }, fake.Calls);
+        // 唤醒后对刚解锁的卷各发一次轻量预读（DESIGN.md 2.5，默认开）。
+        Assert.Equal(
+            new[] { $"unlock:{VolD}", $"unlock:{VolE}", $"preread:{VolD}", $"preread:{VolE}" },
+            fake.Calls);
         Assert.Equal(DiskState.Online, machine.GetState("HDD1"));
         Assert.Equal(new[] { "record:HDD1:Sleeping", "forget:HDD1" }, store.Calls);
+    }
+
+    [Fact]
+    public void WakeAsync_PreReadDisabledBySettings_SkipsPreRead()
+    {
+        var fake = new FakeDiskDeviceOps();
+        var settings = new FakeSettingsStore { Current = new Settings { WakePreReadEnabled = false } };
+        var machine = new DiskStateMachine(fake, new FakeStateStore(), settings);
+        var disk = TwoVolumeDisk();
+
+        machine.SleepAsync(disk).GetAwaiter().GetResult();
+        fake.Calls.Clear();
+
+        var result = machine.WakeAsync(disk).GetAwaiter().GetResult();
+
+        Assert.True(result.Success);
+        Assert.Equal(new[] { $"unlock:{VolD}", $"unlock:{VolE}" }, fake.Calls);
+    }
+
+    [Fact]
+    public void WakeAsync_PreReadFails_WakeStillSucceeds()
+    {
+        var fake = new FakeDiskDeviceOps();
+        fake.PreReadFailures.Add(VolD);
+        fake.PreReadFailures.Add(VolE);
+        var machine = new DiskStateMachine(fake, new FakeStateStore());
+        var disk = TwoVolumeDisk();
+
+        machine.SleepAsync(disk).GetAwaiter().GetResult();
+        fake.Calls.Clear();
+
+        var result = machine.WakeAsync(disk).GetAwaiter().GetResult();
+
+        // 预读尽力而为：失败只吞掉，唤醒照常成功。
+        Assert.True(result.Success);
+        Assert.True(fake.HasCall("preread:"));
+        Assert.Equal(DiskState.Online, machine.GetState("HDD1"));
     }
 
     [Fact]
@@ -300,9 +341,9 @@ public class DiskStateMachineTests
         var result = machine.WakeAsync(disk).GetAwaiter().GetResult();
 
         Assert.True(result.Success);
-        // 离线→唤醒：先清离线属性（卷自动重新挂载），再解锁全部卷（对已消失锁为无害空操作）。
+        // 离线→唤醒：先清离线属性（卷自动重新挂载），再解锁全部卷（对已消失锁为无害空操作），最后逐卷预读。
         Assert.Equal(
-            new[] { "clear-offline:1", $"unlock:{VolD}", $"unlock:{VolE}" },
+            new[] { "clear-offline:1", $"unlock:{VolD}", $"unlock:{VolE}", $"preread:{VolD}", $"preread:{VolE}" },
             fake.Calls);
         Assert.Equal(DiskState.Online, machine.GetState("HDD1"));
         Assert.Equal(new[] { "record:HDD1:Offline", "forget:HDD1" }, store.Calls);

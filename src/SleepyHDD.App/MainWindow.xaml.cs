@@ -39,7 +39,7 @@ namespace SleepyHDD.App
             var inventory = new DiskInventory(deviceOps);
             // 状态文件单一实例：状态机记录/移除与生命周期恢复/唤醒共享同一份在案记录。
             var stateStore = new FileStateStore();
-            var machine = new DiskStateMachine(deviceOps, stateStore);
+            var machine = new DiskStateMachine(deviceOps, stateStore, settingsStore);
             var lifecycle = new DiskLifecycle(deviceOps, stateStore);
             // 开机自启（票 #11，DESIGN.md 2.8）：启动校准——开关为开时以当前 exe 路径重注册任务
             // （应用被移动后自愈），为关时清理残留任务；ReconcileOnStartup 内部吞异常、不阻塞启动。

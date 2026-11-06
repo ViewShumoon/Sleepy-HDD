@@ -17,14 +17,16 @@ public sealed class DiskStateMachine
 {
     private readonly IDiskDeviceOps _ops;
     private readonly IStateStore _store;
+    private readonly ISettingsStore? _settings;
     private readonly object _gate = new();
     private readonly Dictionary<int, SemaphoreSlim> _perDiskLocks = new();
     private readonly Dictionary<string, DiskState> _states = new(StringComparer.Ordinal);
 
-    public DiskStateMachine(IDiskDeviceOps ops, IStateStore store)
+    public DiskStateMachine(IDiskDeviceOps ops, IStateStore store, ISettingsStore? settings = null)
     {
         _ops = ops ?? throw new ArgumentNullException(nameof(ops));
         _store = store ?? throw new ArgumentNullException(nameof(store));
+        _settings = settings;
     }
 
     /// <summary>磁盘状态变更事件（磁盘编号, 新状态）；可能在后台线程触发，订阅方需自行编组到 UI 线程。</summary>
@@ -212,6 +214,16 @@ public sealed class DiskStateMachine
         foreach (var volume in disk.Volumes)
         {
             _ops.UnlockVolume(volume.VolumePath);
+        }
+
+        // 唤醒预读（DESIGN.md 2.5，默认开）：对刚解锁的卷各发一次轻量读，让起转发生在点击时；
+        // 尽力而为，预读失败不影响唤醒结果。
+        if (_settings?.Load().WakePreReadEnabled ?? true)
+        {
+            foreach (var volume in disk.Volumes)
+            {
+                _ = _ops.PreReadVolume(volume.VolumePath);
+            }
         }
 
         _store.Forget(disk.SerialNumber);

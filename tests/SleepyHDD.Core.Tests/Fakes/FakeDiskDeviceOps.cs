@@ -4,7 +4,7 @@ namespace SleepyHDD.Core.Tests.Fakes;
 
 /// <summary>
 /// IDiskDeviceOps 的测试替身：以数据驱动返回磁盘、寻道惩罚与卷，
-/// 并记录全部设备调用序列（lock:/dismount:/unlock:/flush:/standby:/occupants:/set-offline:/clear-offline: 前缀）供断言。
+/// 并记录全部设备调用序列（lock:/dismount:/unlock:/preread:/flush:/standby:/occupants:/set-offline:/clear-offline: 前缀）供断言。
 /// </summary>
 internal sealed class FakeDiskDeviceOps : IDiskDeviceOps
 {
@@ -47,6 +47,9 @@ internal sealed class FakeDiskDeviceOps : IDiskDeviceOps
     /// <summary>ClearDiskOffline 将失败的盘编号集合。</summary>
     public HashSet<int> ClearOfflineFailures { get; } = new();
 
+    /// <summary>PreReadVolume 将失败的卷路径集合（默认成功）。</summary>
+    public HashSet<string> PreReadFailures { get; } = new(StringComparer.Ordinal);
+
     public IReadOnlyList<DiskDescriptor> EnumerateDisks() => Disks;
 
     public bool? GetSeekPenalty(int diskNumber)
@@ -70,6 +73,12 @@ internal sealed class FakeDiskDeviceOps : IDiskDeviceOps
     {
         Record($"unlock:{volumePath}");
         return true;
+    }
+
+    public bool PreReadVolume(string volumePath)
+    {
+        Record($"preread:{volumePath}");
+        return !PreReadFailures.Contains(volumePath);
     }
 
     public bool FlushWriteCache(int diskNumber)

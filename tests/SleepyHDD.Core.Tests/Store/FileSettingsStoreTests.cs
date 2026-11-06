@@ -78,6 +78,18 @@ public class FileSettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public void WakePreReadEnabled_Default_IsOn()
+        => Assert.True(new FileSettingsStore(_path).Load().WakePreReadEnabled);
+
+    [Fact]
+    public void WakePreReadEnabled_SurvivesReload()
+    {
+        new FileSettingsStore(_path).Save(new Settings { WakePreReadEnabled = false });
+
+        Assert.False(new FileSettingsStore(_path).Load().WakePreReadEnabled);
+    }
+
+    [Fact]
     public void Save_WithSchedules_SurvivesReload()
     {
         var schedule = new DiskSchedule

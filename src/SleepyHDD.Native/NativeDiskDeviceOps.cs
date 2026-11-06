@@ -770,6 +770,27 @@ public sealed class NativeDiskDeviceOps : IDiskDeviceOps
     }
 
     /// <inheritdoc />
+    public bool PreReadVolume(string volumePath)
+    {
+        // 唤醒预读（DESIGN.md 2.5）：打开卷句柄读首个扇区即触发起转；尽力而为，任一步失败返回 false。
+        using SafeFileHandle handle = NativeMethods.CreateFileW(
+            volumePath.TrimEnd('\\'),
+            NativeMethods.GENERIC_READ,
+            NativeMethods.FILE_SHARE_READ_WRITE | NativeMethods.FILE_SHARE_DELETE,
+            IntPtr.Zero,
+            NativeMethods.OPEN_EXISTING,
+            0,
+            IntPtr.Zero);
+        if (handle.IsInvalid)
+        {
+            return false;
+        }
+
+        return NativeMethods.ReadFile(
+            handle, new byte[NativeMethods.SectorSize], NativeMethods.SectorSize, out _, IntPtr.Zero);
+    }
+
+    /// <inheritdoc />
     public bool FlushWriteCache(int diskNumber) =>
         SendAtaNoDataCommand(diskNumber, NativeMethods.AtaCommandCacheFlushExt);
 
