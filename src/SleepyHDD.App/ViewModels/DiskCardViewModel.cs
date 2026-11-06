@@ -61,6 +61,9 @@ public sealed partial class DiskCardViewModel : ObservableObject
     /// <summary>物理盘编号，用于状态事件路由回本卡片。</summary>
     public int DiskNumber => _disk.DiskNumber;
 
+    /// <summary>操作失败事件（型号, 结果）：托盘据此弹通知（票 #7），主窗口内的展示仍走 <see cref="StatusMessage"/>。</summary>
+    public event Action<string, DiskOperationResult>? OperationFailed;
+
     /// <summary>受限展示态：徽章显示红字原因，无动作按钮。</summary>
     public bool IsRestricted { get; }
 
@@ -151,13 +154,14 @@ public sealed partial class DiskCardViewModel : ObservableObject
         }
     }
 
-    /// <summary>展示失败反馈（含占用进程列表）；全局操作失败时由 MainViewModel 路由到本卡片。</summary>
+    /// <summary>展示失败反馈（含占用进程列表）；全局操作失败时由 MainViewModel 路由到本卡片，并向托盘发事件。</summary>
     public void ReportFailure(DiskOperationResult result)
     {
         string occupants = result.OccupyingProcesses.Count > 0
             ? $" 占用进程：{string.Join("、", result.OccupyingProcesses)}"
             : string.Empty;
         StatusMessage = $"{result.Message}{occupants}";
+        OperationFailed?.Invoke(Model, result);
     }
 
     private static string Describe(RestrictedReason reason) => reason switch

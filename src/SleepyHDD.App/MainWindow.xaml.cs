@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using SleepyHDD.App.Devices;
 using WinRT.Interop;
+using SleepyHDD.App.Tray;
 using SleepyHDD.App.ViewModels;
 using SleepyHDD.Core.Inventory;
 using SleepyHDD.Core.StateMachine;
@@ -18,6 +19,7 @@ namespace SleepyHDD.App
     public sealed partial class MainWindow : Window
     {
         private readonly DeviceChangeWatcher _deviceWatcher;
+        private readonly TrayIconController _tray;
 
         /// <summary>组合根：App 层负责把 Native 设备实现与设置/状态存储注入 Core 磁盘清单、休眠状态机与设置视图模型。</summary>
         public MainViewModel ViewModel { get; }
@@ -37,6 +39,10 @@ namespace SleepyHDD.App
             _deviceWatcher = new DeviceChangeWatcher(
                 WindowNative.GetWindowHandle(this), ViewModel.Refresh, DispatcherQueue);
             Closed += (_, _) => _deviceWatcher.Dispose();
+
+            // 托盘常驻（票 #7）：菜单复用主窗口同一批 Core 操作；关窗最小化到托盘，托盘"退出"才结束进程。
+            _tray = new TrayIconController(ViewModel, this);
+            Closed += (_, _) => _tray.Dispose();
         }
     }
 }
