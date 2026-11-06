@@ -7,8 +7,9 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <!-- 票 #12：发布产物的 exe 图标，取自托盘常态图标（Assets\tray-normal.png，32x32 单帧 ICO）。 -->
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
-    <Platforms>x86;x64;ARM64</Platforms>
-    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+    <!-- DESIGN.md 3：仅支持 x64（Windows 11 x64，ADR-0004）；发布 RID 同步收敛为 win-x64（票 #12）。 -->
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <!-- 票 #12：模板遗留的 PublishProfile 指向不存在的 win-$(Platform).pubxml（NETSDK1198 警告），
          且 *.pubxml 在 .gitignore 内无法入库；发布配置统一收敛在本 csproj 与发布命令中。 -->
     <UseWinUI>true</UseWinUI>

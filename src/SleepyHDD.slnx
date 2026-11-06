@@ -1,14 +1,11 @@
 <Solution>
   <Configurations>
-    <Platform Name="ARM64" />
+    <!-- DESIGN.md 3：App 限定 x64，解决方案只保留 x64 平台。 -->
     <Platform Name="x64" />
-    <Platform Name="x86" />
   </Configurations>
   <Project Path="../tests/SleepyHDD.Core.Tests/SleepyHDD.Core.Tests.csproj" />
   <Project Path="SleepyHDD.App/SleepyHDD.App.csproj">
-    <Platform Solution="*|ARM64" Project="ARM64" />
     <Platform Solution="*|x64" Project="x64" />
-    <Platform Solution="*|x86" Project="x86" />
     <Deploy />
   </Project>
   <Project Path="SleepyHDD.Core/SleepyHDD.Core.csproj" />
