@@ -56,6 +56,26 @@ public class FileSettingsStoreTests : IDisposable
         Assert.Contains("Offline", json);
     }
 
+    [Fact]
+    public void AutoStartEnabled_Default_IsOff()
+        => Assert.False(new FileSettingsStore(_path).Load().AutoStartEnabled);
+
+    [Fact]
+    public void AutoStartEnabled_SurvivesReload()
+    {
+        new FileSettingsStore(_path).Save(new Settings { AutoStartEnabled = true });
+
+        Assert.True(new FileSettingsStore(_path).Load().AutoStartEnabled);
+    }
+
+    [Fact]
+    public void Load_CorruptFile_AutoStartDefaultsToOff()
+    {
+        File.WriteAllText(_path, "{ not json");
+
+        Assert.False(new FileSettingsStore(_path).Load().AutoStartEnabled);
+    }
+
     public void Dispose()
     {
         if (File.Exists(_path))
