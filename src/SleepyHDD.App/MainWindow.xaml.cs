@@ -4,6 +4,7 @@ using WinRT.Interop;
 using SleepyHDD.App.Tray;
 using SleepyHDD.App.ViewModels;
 using SleepyHDD.Core.Inventory;
+using SleepyHDD.Core.Lifecycle;
 using SleepyHDD.Core.StateMachine;
 using SleepyHDD.Core.Store;
 using SleepyHDD.Native;
@@ -28,12 +29,41 @@ namespace SleepyHDD.App
         {
             InitializeComponent();
             var deviceOps = new NativeDiskDeviceOps();
-            var machine = new DiskStateMachine(deviceOps, new FileStateStore());
+            // 状态文件单一实例：状态机记录/移除与生命周期恢复/唤醒共享同一份在案记录。
+            var stateStore = new FileStateStore();
+            var machine = new DiskStateMachine(deviceOps, stateStore);
+            var lifecycle = new DiskLifecycle(deviceOps, stateStore);
             var settings = new SettingsViewModel(new FileSettingsStore());
             ViewModel = new MainViewModel(new DiskInventory(deviceOps), machine, settings);
+
+            // 生命周期启动恢复（票 #9，ADR-0005）：按序列号匹配，为在案且仍离线的盘清障、
+            // 清理已消失盘的记录；作为崩溃/被强杀的兜底，任何异常都不阻塞应用启动。
+            try
+            {
+                lifecycle.RecoverOnStartup();
+            }
+            catch
+            {
+                // 恢复失败留待下次启动重试，不影响本次启动。
+            }
+
             // WinUI 3 的 Window 没有 DataContext，绑定源设在内容根元素上。
             ((FrameworkElement)Content).DataContext = ViewModel;
             ViewModel.Refresh();
+
+            // 退出唤醒（票 #9）：托盘"退出"是唯一真正关窗的路径，进程结束前唤醒全部在案盘；
+            // 唤醒异常不阻止退出，遗漏由下次启动恢复兜底。
+            Closed += (_, _) =>
+            {
+                try
+                {
+                    lifecycle.WakeAllForExit(ViewModel.ManagedDisksSnapshot);
+                }
+                catch
+                {
+                    // 尽力而为：退出优先，残留状态交下次启动恢复。
+                }
+            };
 
             // 设备热插拔：磁盘接入/移除时自动增删卡片（票 #3，WM_DEVICECHANGE）。
             _deviceWatcher = new DeviceChangeWatcher(

@@ -42,6 +42,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>受管磁盘卡片。</summary>
     public ObservableCollection<DiskCardViewModel> Disks { get; } = new();
 
+    /// <summary>当前受管磁盘快照（含卷）：生命周期退出唤醒复用已枚举结果，避免退出时重新枚举（票 #9）。</summary>
+    public IReadOnlyList<ManagedDisk> ManagedDisksSnapshot => _managedDisks;
+
     /// <summary>受管磁盘热插拔增删事件（新增, 移除）；首次刷新不触发，托盘据此发通知（票 #7）。</summary>
     public event Action<IReadOnlyList<ManagedDisk>, IReadOnlyList<ManagedDisk>>? DiskPlugChanged;
 
