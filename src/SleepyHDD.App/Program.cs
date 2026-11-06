@@ -1,8 +1,8 @@
 using System;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using Microsoft.Windows.ApplicationModel.DynamicDependency;
 using SleepyHDD.App.Startup;
+using SleepyHDD.Native;
 
 namespace SleepyHDD.App
 {
@@ -12,14 +12,6 @@ namespace SleepyHDD.App
     /// </summary>
     public static class Program
     {
-        private const uint MbYesNo = 0x00000004;
-        private const uint MbIconWarning = 0x00000030;
-        private const uint MbIconInformation = 0x00000040;
-        private const int Idyes = 6;
-
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        private static extern int MessageBoxW(IntPtr hWnd, string text, string caption, uint type);
-
         [STAThread]
         public static void Main(string[] args)
         {
@@ -54,11 +46,9 @@ namespace SleepyHDD.App
                 }
 
                 // 运行时缺失：询问是否引导安装。
-                bool agreed = MessageBoxW(
-                        IntPtr.Zero,
+                bool agreed = NativeMessageBox.ConfirmWarning(
                         $"Sleepy HDD 需要 Windows App Runtime {RuntimeCheck.DisplayVersion} 或更高版本，未在本机检测到。\n\n现在打开下载页面进行安装吗？",
-                        "缺少 Windows App Runtime",
-                        MbYesNo | MbIconWarning) == Idyes;
+                        "缺少 Windows App Runtime");
 
                 if (RuntimeCheck.DecideFromUserChoice(agreed) == InstallPromptAction.Abort)
                 {
@@ -68,11 +58,9 @@ namespace SleepyHDD.App
                 OpenDownloadPage();
 
                 // 等待用户手动完成安装后循环重新检测。
-                bool completed = MessageBoxW(
-                        IntPtr.Zero,
+                bool completed = NativeMessageBox.ConfirmInformation(
                         "Windows App Runtime 是否已安装完成？\n\n选择“否”将退出程序。",
-                        "安装 Windows App Runtime",
-                        MbYesNo | MbIconInformation) == Idyes;
+                        "安装 Windows App Runtime");
 
                 if (!completed)
                 {
@@ -101,11 +89,9 @@ namespace SleepyHDD.App
             catch
             {
                 // 无法拉起浏览器时退回手动提示，不中断引导流程。
-                MessageBoxW(
-                    IntPtr.Zero,
+                NativeMessageBox.Warn(
                     $"无法自动打开浏览器，请手动访问：\n{RuntimeCheck.DownloadPageUrl}",
-                    "下载 Windows App Runtime",
-                    MbIconWarning);
+                    "下载 Windows App Runtime");
             }
         }
     }
