@@ -171,6 +171,15 @@ public sealed class TrayIconController : IDisposable
         _tray.ShowNotification(message.Title, message.Body, NotificationIcon.Warning);
     }
 
+    /// <summary>展示 Core 生成的通知（定时触发结果等，票 #10）；级别由消息自带。</summary>
+    public void ShowNotification(NotificationMessage message)
+    {
+        _tray.ShowNotification(
+            message.Title,
+            message.Body,
+            message.Severity == NotificationSeverity.Warning ? NotificationIcon.Warning : NotificationIcon.Info);
+    }
+
     private void OnDiskPlugChanged(IReadOnlyList<ManagedDisk> added, IReadOnlyList<ManagedDisk> removed)
     {
         foreach (var disk in added)
