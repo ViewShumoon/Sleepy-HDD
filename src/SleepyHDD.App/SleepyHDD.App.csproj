@@ -13,6 +13,14 @@
     <WinUISDKReferences>false</WinUISDKReferences>
     <EnableMsixTooling>true</EnableMsixTooling>
     <Nullable>enable</Nullable>
+    <!-- issue #8：免安装 unpackaged 部署（ADR-0004），Windows App Runtime 由启动路径自行引导。 -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <!-- 禁用自动注入的 bootstrap/deployment 初始化：失败时自动初始化器会直接退出进程，无法满足"引导安装后继续启动"。 -->
+    <WindowsAppSdkBootstrapInitialize>false</WindowsAppSdkBootstrapInitialize>
+    <WindowsAppSdkDeploymentManagerInitialize>false</WindowsAppSdkDeploymentManagerInitialize>
+    <!-- 禁用 XAML 生成的入口点，改用自定义 Program.Main（先检测运行时，再启动 WinUI）。
+         注意：需直接定义 C# 符号，WindowsAppSDK 2.6.5 不会把同名 MSBuild 属性映射为编译常量。 -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
