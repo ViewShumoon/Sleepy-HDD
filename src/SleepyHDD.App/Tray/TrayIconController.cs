@@ -20,7 +20,7 @@ namespace SleepyHDD.App.Tray;
 /// 全部休眠（或全部离线，随默认动作）/全部唤醒 + 退出，动作直接复用主窗口同一批
 /// ViewModel 命令（即同一 Core 操作），状态变化经卡片事件实时重建菜单与图标；
 /// 锁定失败（附占用进程）与磁盘插拔通知由卡片/视图模型事件路由至此。
-/// 关闭主窗口＝隐藏到托盘，托盘"退出"才真正结束进程（退出唤醒逻辑属生命周期票 #9，此处仅留退出通路）。
+/// 关闭主窗口＝隐藏到托盘，托盘"退出"才真正结束进程（退出唤醒由生命周期票 #9 在窗口 Closed 订阅处理）。
 /// 菜单项文案与图标变体选择等纯决策逻辑在 Core 的 <see cref="TrayMenuBuilder"/>，已单测覆盖。
 /// </summary>
 public sealed class TrayIconController : IDisposable
