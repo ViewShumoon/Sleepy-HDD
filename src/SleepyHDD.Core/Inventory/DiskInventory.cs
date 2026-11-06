@@ -95,6 +95,12 @@ public sealed class DiskInventory
             reasons.Add(RestrictedReason.DynamicOrSpacesMember);
         }
 
+        // pass-through 失败的盘（如 Intel RST/RAID 驱动拦截）无法安全发送停转命令。
+        if (!_deviceOps.ProbeAtaPassThrough(disk.DiskNumber))
+        {
+            reasons.Add(RestrictedReason.AtaPassThroughUnavailable);
+        }
+
         return reasons;
     }
 
