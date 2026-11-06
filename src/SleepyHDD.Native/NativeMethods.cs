@@ -10,6 +10,7 @@ namespace SleepyHDD.Native;
 internal static class NativeMethods
 {
     public const string Kernel32 = "kernel32.dll";
+    public const string Advapi32 = "advapi32.dll";
 
     // IOCTL 控制码（来自 ntddstor.h / ntdddisk.h / ntddscsi.h，按 CTL_CODE 展开核实）。
     public const uint IOCTL_STORAGE_QUERY_PROPERTY = 0x002D1400;
@@ -77,6 +78,34 @@ internal static class NativeMethods
     /// <summary>word 189 == 1 表示非旋转介质；0 表示未报告；&gt; 0x0400 表示 RPM。</summary>
     public const ushort RotationRateNonRotating = 1;
     public const ushort RotationRateRpmThreshold = 0x0400;
+
+    // 受限判定：分区表签名（受限盘探测读取扇区用）。
+    /// <summary>MBR 分区类型：0x42=LDM（动态盘），0xEE=GPT 保护分区。</summary>
+    public const byte MbrPartitionTypeLdm = 0x42;
+    public const byte MbrPartitionTypeGptProtective = 0xEE;
+
+    /// <summary>GPT 头部签名（LBA1 前 8 字节）。</summary>
+    public const string GptHeaderSignature = "EFI PART";
+
+    /// <summary>GPT 头部字段偏移：PartitionEntryLBA(8)=72、NumberOfPartitionEntries(4)=80、SizeOfPartitionEntry(4)=84。</summary>
+    public const int GptEntryLbaOffset = 72;
+    public const int GptEntryCountOffset = 80;
+    public const int GptEntrySizeOffset = 84;
+
+    /// <summary>扇区字节数与 SetFilePointerEx 的 FILE_BEGIN。</summary>
+    public const int SectorSize = 512;
+    public const uint FILE_BEGIN = 0;
+
+    // 受限判定：页面文件注册表。
+    public static readonly IntPtr HKEY_LOCAL_MACHINE = new(unchecked((int)0x80000002));
+    public const uint KEY_QUERY_VALUE = 0x0001;
+    public const uint REG_MULTI_SZ = 7;
+    public const int ERROR_SUCCESS = 0;
+
+    /// <summary>页面文件配置位置：REG_MULTI_SZ，每项形如 "path [初始大小] [最大值]"。</summary>
+    public const string MemoryManagementKey =
+        @"SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management";
+    public const string PagingFilesValue = "PagingFiles";
 
     [StructLayout(LayoutKind.Sequential)]
     public struct STORAGE_PROPERTY_QUERY
@@ -230,4 +259,45 @@ internal static class NativeMethods
         ref uint pnProcInfo,
         [Out] RM_PROCESS_INFO[]? rgAffectedApps,
         out uint lpdwRebootReasons);
+
+    [DllImport(Kernel32, SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern uint GetSystemDirectoryW(StringBuilder lpBuffer, uint uSize);
+
+    [DllImport(Kernel32, SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern uint GetWindowsDirectoryW(StringBuilder lpBuffer, uint uSize);
+
+    [DllImport(Kernel32, SetLastError = true)]
+    public static extern bool SetFilePointerEx(
+        SafeFileHandle hFile,
+        long liDistanceToMove,
+        out long lpNewFilePointer,
+        uint dwMoveMethod);
+
+    [DllImport(Kernel32, SetLastError = true)]
+    public static extern bool ReadFile(
+        SafeFileHandle hFile,
+        byte[] lpBuffer,
+        uint nNumberOfBytesToRead,
+        out uint lpNumberOfBytesRead,
+        IntPtr lpOverlapped);
+
+    [DllImport(Advapi32, SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern int RegOpenKeyExW(
+        IntPtr hKey,
+        string lpSubKey,
+        uint ulOptions,
+        uint samDesired,
+        out IntPtr phkResult);
+
+    [DllImport(Advapi32, SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern int RegQueryValueExW(
+        IntPtr hKey,
+        string lpValueName,
+        IntPtr lpReserved,
+        out uint lpType,
+        byte[]? lpData,
+        ref int lpcbData);
+
+    [DllImport(Advapi32, SetLastError = true)]
+    public static extern int RegCloseKey(IntPtr hKey);
 }

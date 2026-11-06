@@ -171,6 +171,7 @@ public class DiskStateMachineTests
         Model = "ST1000DM010",
         SerialNumber = serial,
         SizeBytes = 1_000_204_886_016,
+        RestrictedReasons = Array.Empty<RestrictedReason>(),
         Volumes = volumePaths
             .Select((path, index) => new ManagedVolume
             {

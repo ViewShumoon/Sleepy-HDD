@@ -10,7 +10,8 @@ using SleepyHDD.Core.StateMachine;
 namespace SleepyHDD.App.ViewModels;
 
 /// <summary>
-/// 受管磁盘卡片展示项：在纯展示之上支持"休眠/唤醒"动作与状态徽章（保护模式，ticket #4）。
+/// 受管磁盘卡片展示项：受限盘仅以红字徽章说明原因、无任何动作按钮（DESIGN.md 4.1）；
+/// 正常盘支持"休眠/唤醒"动作与在线/休眠状态徽章（保护模式，ticket #4）。
 /// </summary>
 public sealed partial class DiskCardViewModel : ObservableObject
 {
@@ -33,6 +34,14 @@ public sealed partial class DiskCardViewModel : ObservableObject
         Volumes = disk.Volumes
             .Select(volume => new VolumeCardViewModel(volume))
             .ToList();
+        IsRestricted = disk.IsRestricted;
+        IsNotRestricted = !disk.IsRestricted;
+        StatusText = disk.PrimaryRestrictedReason is { } reason
+            ? $"受限 · {Describe(reason)}"
+            : string.Empty;
+        RestrictedReasonsText = disk.IsRestricted
+            ? string.Join("；", disk.RestrictedReasons.Select(Describe))
+            : string.Empty;
         _state = machine.GetState(disk.DiskNumber);
     }
 
@@ -48,6 +57,18 @@ public sealed partial class DiskCardViewModel : ObservableObject
     /// <summary>物理盘编号，用于状态事件路由回本卡片。</summary>
     public int DiskNumber => _disk.DiskNumber;
 
+    /// <summary>受限展示态：徽章显示红字原因，无动作按钮。</summary>
+    public bool IsRestricted { get; }
+
+    /// <summary>不受限展示态：徽章显示在线/休眠状态，可执行休眠/唤醒。</summary>
+    public bool IsNotRestricted { get; }
+
+    /// <summary>受限徽章文本："受限 · 主因说明"；不受限时为空（正常盘徽章用 <see cref="StateText"/>）。</summary>
+    public string StatusText { get; }
+
+    /// <summary>全部受限原因说明（悬停提示用）；不受限时为空。</summary>
+    public string RestrictedReasonsText { get; }
+
     /// <summary>磁盘软件视角状态；由 MainViewModel 经 UI 线程分发更新。</summary>
     [ObservableProperty]
     private DiskState _state;
@@ -61,7 +82,7 @@ public sealed partial class DiskCardViewModel : ObservableObject
     [ObservableProperty]
     private string _statusMessage = string.Empty;
 
-    /// <summary>徽章文本：在线/休眠/离线。</summary>
+    /// <summary>状态徽章文本：在线/休眠/离线。</summary>
     public string StateText => State switch
     {
         DiskState.Online => "在线",
@@ -94,7 +115,7 @@ public sealed partial class DiskCardViewModel : ObservableObject
 
     partial void OnStatusMessageChanged(string value) => OnPropertyChanged(nameof(HasStatusMessage));
 
-    private bool CanToggle() => !IsBusy;
+    private bool CanToggle() => !IsBusy && !IsRestricted;
 
     /// <summary>休眠/唤醒切换：在线→转休眠，休眠→唤醒；失败时展示占用进程报告。</summary>
     [RelayCommand(CanExecute = nameof(CanToggle))]
@@ -121,4 +142,13 @@ public sealed partial class DiskCardViewModel : ObservableObject
             IsBusy = false;
         }
     }
+
+    private static string Describe(RestrictedReason reason) => reason switch
+    {
+        RestrictedReason.BootOrSystemVolume => "承载启动/系统卷",
+        RestrictedReason.Pagefile => "承载页面文件",
+        RestrictedReason.DynamicOrSpacesMember => "动态盘/Storage Spaces 成员",
+        RestrictedReason.AtaPassThroughUnavailable => "ATA pass-through 不可用",
+        _ => reason.ToString(),
+    };
 }

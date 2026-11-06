@@ -75,15 +75,32 @@
                                         FontWeight="SemiBold"
                                         Text="{Binding Model}"
                                         TextTrimming="CharacterEllipsis" />
+                                    <!-- 状态徽章：在线（绿）/ 休眠（黄）；受限盘另显红字徽章 -->
                                     <Border
                                         HorizontalAlignment="Right"
                                         Padding="8,2"
                                         Background="{Binding BadgeBrush}"
-                                        CornerRadius="4">
+                                        CornerRadius="4"
+                                        Visibility="{Binding IsNotRestricted, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <TextBlock
                                             FontSize="12"
                                             Foreground="White"
                                             Text="{Binding StateText}" />
+                                    </Border>
+                                    <Border
+                                        HorizontalAlignment="Right"
+                                        Padding="8,2"
+                                        Background="#C62828"
+                                        CornerRadius="4"
+                                        Visibility="{Binding IsRestricted, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <ToolTipService.ToolTip>
+                                            <ToolTip Content="{Binding RestrictedReasonsText}" />
+                                        </ToolTipService.ToolTip>
+                                        <TextBlock
+                                            FontSize="12"
+                                            Foreground="White"
+                                            Text="{Binding StatusText}"
+                                            TextTrimming="CharacterEllipsis" />
                                     </Border>
                                 </Grid>
                                 <TextBlock
@@ -104,8 +121,10 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                                <!-- 休眠/唤醒动作与失败反馈（占用进程报告） -->
-                                <Grid Margin="0,10,0,0">
+                                <!-- 休眠/唤醒动作与失败反馈（占用进程报告）；受限盘无动作按钮 -->
+                                <Grid
+                                    Margin="0,10,0,0"
+                                    Visibility="{Binding IsNotRestricted, Converter={StaticResource BooleanToVisibilityConverter}}">
                                     <TextBlock
                                         HorizontalAlignment="Left"
                                         VerticalAlignment="Center"
