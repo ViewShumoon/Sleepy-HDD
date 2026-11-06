@@ -75,15 +75,32 @@
                                         FontWeight="SemiBold"
                                         Text="{Binding Model}"
                                         TextTrimming="CharacterEllipsis" />
+                                    <!-- 状态徽章：在线（绿）/ 受限（红字说明，无动作按钮） -->
                                     <Border
                                         HorizontalAlignment="Right"
                                         Padding="8,2"
                                         Background="#2E7D32"
-                                        CornerRadius="4">
+                                        CornerRadius="4"
+                                        Visibility="{Binding IsNotRestricted, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <TextBlock
                                             FontSize="12"
                                             Foreground="White"
                                             Text="在线" />
+                                    </Border>
+                                    <Border
+                                        HorizontalAlignment="Right"
+                                        Padding="8,2"
+                                        Background="#C62828"
+                                        CornerRadius="4"
+                                        Visibility="{Binding IsRestricted, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <ToolTipService.ToolTip>
+                                            <ToolTip Content="{Binding RestrictedReasonsText}" />
+                                        </ToolTipService.ToolTip>
+                                        <TextBlock
+                                            FontSize="12"
+                                            Foreground="White"
+                                            Text="{Binding StatusText}"
+                                            TextTrimming="CharacterEllipsis" />
                                     </Border>
                                 </Grid>
                                 <TextBlock
