@@ -31,6 +31,11 @@ public sealed class DiskInventory
         var bootSystemLetters = new HashSet<string>(
             _deviceOps.GetBootSystemDriveLetters(),
             StringComparer.OrdinalIgnoreCase);
+        var pagefileLetters = new HashSet<string>(
+            _deviceOps.GetPagefilePaths()
+                .Select(ExtractDriveLetter)
+                .OfType<string>(),
+            StringComparer.OrdinalIgnoreCase);
 
         var managed = new List<ManagedDisk>();
         foreach (var disk in _deviceOps.EnumerateDisks())
@@ -55,7 +60,7 @@ public sealed class DiskInventory
                 SerialNumber = disk.SerialNumber,
                 SizeBytes = disk.SizeBytes,
                 Volumes = volumes,
-                RestrictedReasons = ClassifyRestricted(disk, volumes, bootSystemLetters),
+                RestrictedReasons = ClassifyRestricted(disk, volumes, bootSystemLetters, pagefileLetters),
             });
         }
 
@@ -70,7 +75,8 @@ public sealed class DiskInventory
     private IReadOnlyList<RestrictedReason> ClassifyRestricted(
         DiskDescriptor disk,
         IReadOnlyList<ManagedVolume> volumes,
-        HashSet<string> bootSystemLetters)
+        HashSet<string> bootSystemLetters,
+        HashSet<string> pagefileLetters)
     {
         var reasons = new List<RestrictedReason>();
 
@@ -79,8 +85,21 @@ public sealed class DiskInventory
             reasons.Add(RestrictedReason.BootOrSystemVolume);
         }
 
+        if (volumes.Any(v => pagefileLetters.Contains(v.DriveLetter)))
+        {
+            reasons.Add(RestrictedReason.Pagefile);
+        }
+
         return reasons;
     }
+
+    /// <summary>
+    /// 从路径中提取盘符（如 "D:\pagefile.sys" 取 "D"）；非盘符形式路径（如设备路径）返回 null。
+    /// </summary>
+    private static string? ExtractDriveLetter(string path)
+        => path is { Length: >= 2 } && path[1] == ':' && char.IsLetter(path[0])
+            ? char.ToUpperInvariant(path[0]).ToString()
+            : null;
 
     /// <summary>
     /// 把挂载了盘符且能定位物理盘的卷按盘编号归组。

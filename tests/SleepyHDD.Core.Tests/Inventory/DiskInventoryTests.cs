@@ -424,6 +424,30 @@ public class DiskInventoryTests
         Assert.False(disk.IsRestricted);
     }
 
+    [Fact]
+    public void DynamicOrSpacesMemberDisk_IsRestrictedWithDynamicReason()
+    {
+        var fake = new FakeDiskDeviceOps
+        {
+            Disks =
+            {
+                Descriptor(1, "Disk1"),
+                Descriptor(2, "Disk2"),
+            },
+        };
+        fake.Penalties[1] = true;
+        fake.Penalties[2] = true;
+        fake.DynamicOrSpacesDisks.Add(2);
+
+        var disks = new DiskInventory(fake).EnumerateManagedDisks();
+
+        var member = disks.Single(d => d.DiskNumber == 2);
+        Assert.True(member.IsRestricted);
+        Assert.Equal(new[] { RestrictedReason.DynamicOrSpacesMember }, member.RestrictedReasons);
+        var plain = disks.Single(d => d.DiskNumber == 1);
+        Assert.False(plain.IsRestricted);
+    }
+
     private static DiskDescriptor Descriptor(int number, string model) => new()
     {
         DiskNumber = number,
