@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Dispatching;
 using SleepyHDD.Core.Inventory;
+using SleepyHDD.Core.Notifications;
 using SleepyHDD.Core.StateMachine;
 using SleepyHDD.Core.Store;
 
@@ -24,6 +25,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly SettingsViewModel _settings;
     private readonly DispatcherQueue _dispatcher;
     private IReadOnlyList<ManagedDisk> _managedDisks = Array.Empty<ManagedDisk>();
+    private bool _hasRefreshed;
 
     public MainViewModel(DiskInventory inventory, DiskStateMachine machine, SettingsViewModel settings)
     {
@@ -39,6 +41,9 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>受管磁盘卡片。</summary>
     public ObservableCollection<DiskCardViewModel> Disks { get; } = new();
+
+    /// <summary>受管磁盘热插拔增删事件（新增, 移除）；首次刷新不触发，托盘据此发通知（票 #7）。</summary>
+    public event Action<IReadOnlyList<ManagedDisk>, IReadOnlyList<ManagedDisk>>? DiskPlugChanged;
 
     /// <summary>共享设置视图模型（设置页与卡片按钮绑定用）。</summary>
     public SettingsViewModel Settings => _settings;
@@ -80,10 +85,19 @@ public sealed partial class MainViewModel : ObservableObject
 
     private bool CanRunGlobal() => !IsGlobalBusy;
 
-    /// <summary>重新枚举受管磁盘并刷新卡片集合，卡片初始状态取状态机当前值。</summary>
+    /// <summary>重新枚举受管磁盘并刷新卡片集合，卡片初始状态取状态机当前值；与上次枚举比对得出插拔增删并通知订阅方。</summary>
     public void Refresh()
     {
         var disks = _inventory.EnumerateManagedDisks().ToList();
+        if (_hasRefreshed)
+        {
+            var (added, removed) = DiskChangeDiff.Compute(_managedDisks, disks);
+            if (added.Count > 0 || removed.Count > 0)
+            {
+                DiskPlugChanged?.Invoke(added, removed);
+            }
+        }
+        _hasRefreshed = true;
         _managedDisks = disks;
 
         Disks.Clear();
