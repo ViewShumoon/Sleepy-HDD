@@ -5,6 +5,9 @@ using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
+using SleepyHDD.App.ViewModels;
+using SleepyHDD.Core.Inventory;
+using SleepyHDD.Native;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -23,9 +26,16 @@ namespace SleepyHDD.App
     /// </summary>
     public sealed partial class MainWindow : Window
     {
+        /// <summary>组合根：App 层负责把 Native 设备实现注入 Core 磁盘清单。</summary>
+        public MainViewModel ViewModel { get; }
+
         public MainWindow()
         {
             InitializeComponent();
+            ViewModel = new MainViewModel(new DiskInventory(new NativeDiskDeviceOps()));
+            // WinUI 3 的 Window 没有 DataContext，绑定源设在内容根元素上。
+            ((FrameworkElement)Content).DataContext = ViewModel;
+            ViewModel.Refresh();
         }
     }
 }
