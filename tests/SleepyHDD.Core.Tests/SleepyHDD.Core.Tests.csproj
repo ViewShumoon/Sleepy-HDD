@@ -25,4 +25,9 @@
     <ProjectReference Include="..\..\src\SleepyHDD.Native\SleepyHDD.Native.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- issue #8：链接 App 工程的纯决策源；App 工程 TFM 含 Windows 平台版本，无法被本工程(net8.0)直接引用。 -->
+    <Compile Include="..\..\src\SleepyHDD.App\Startup\RuntimeCheck.cs" Link="Startup\RuntimeCheck.cs" />
+  </ItemGroup>
+
 </Project>
