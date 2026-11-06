@@ -5,9 +5,12 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>SleepyHDD.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- 票 #12：发布产物的 exe 图标，取自托盘常态图标（Assets\tray-normal.png，32x32 单帧 ICO）。 -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <Platforms>x86;x64;ARM64</Platforms>
     <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
-    <PublishProfile>win-$(Platform).pubxml</PublishProfile>
+    <!-- 票 #12：模板遗留的 PublishProfile 指向不存在的 win-$(Platform).pubxml（NETSDK1198 警告），
+         且 *.pubxml 在 .gitignore 内无法入库；发布配置统一收敛在本 csproj 与发布命令中。 -->
     <UseWinUI>true</UseWinUI>
     <ImplicitUsings>enable</ImplicitUsings>
     <WinUISDKReferences>false</WinUISDKReferences>
@@ -31,9 +34,10 @@
     <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
     <Content Include="Assets\StoreLogo.png" />
     <Content Include="Assets\Wide310x150Logo.scale-200.png" />
-    <!-- 票 #7：托盘图标常态/睡眠变体，运行时从输出目录加载 -->
-    <Content Include="Assets\tray-normal.png" />
-    <Content Include="Assets\tray-sleeping.png" />
+    <!-- 票 #7：托盘图标常态/睡眠变体，运行时从输出目录加载。
+         票 #12：显式声明发布复制——Content 默认不进 publish 目录，缺失会导致发布产物启动时托盘构造抛异常。 -->
+    <Content Include="Assets\tray-normal.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\tray-sleeping.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -74,7 +78,8 @@
   <PropertyGroup>
     <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
     <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
-    <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
-    <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
+    <!-- 票 #12：关闭模板默认的裁剪发布——WinUI 3 / WindowsAppSDK 不支持 trimming，
+         且 Store 的 System.Text.Json 反射序列化在裁剪下产生 IL2026、settings/state 持久化有运行时断裂风险。 -->
+    <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
 </Project>
