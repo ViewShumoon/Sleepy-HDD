@@ -33,14 +33,274 @@ public sealed class NativeDiskDeviceOps : IDiskDeviceOps
         string path = $@"\\.\PhysicalDrive{diskNumber}";
 
         // 优先 ATA pass-through IDENTIFY DEVICE 读 word 189（需要写权限，通常要求管理员）。
-        bool? fromIdentify = TryGetRotationFromIdentify(path);
-        if (fromIdentify.HasValue)
+        byte[] identifyData = new byte[NativeMethods.IdentifyDataLength];
+        if (TryRunAtaIdentifyDevice(path, identifyData))
         {
-            return fromIdentify;
+            ushort rotationRate = (ushort)(
+                identifyData[NativeMethods.IdentifyWord189ByteOffset]
+                | (identifyData[NativeMethods.IdentifyWord189ByteOffset + 1] << 8));
+            if (rotationRate == NativeMethods.RotationRateNonRotating)
+            {
+                return false;
+            }
+
+            if (rotationRate > NativeMethods.RotationRateRpmThreshold)
+            {
+                return true;
+            }
+
+            // 0 或保留值：未报告，交由调用方走 property query 兜底。
         }
 
         // 兜底：StorageDeviceSeekPenaltyProperty 标准查询。
         return TryGetSeekPenaltyProperty(path);
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> GetBootSystemDriveLetters()
+    {
+        var letters = new List<string>();
+        TryAddDriveLetter(letters, QueryFixedPath(NativeMethods.GetSystemDirectoryW));
+        TryAddDriveLetter(letters, QueryFixedPath(NativeMethods.GetWindowsDirectoryW));
+        return letters;
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> GetPagefilePaths()
+    {
+        if (NativeMethods.RegOpenKeyExW(
+                NativeMethods.HKEY_LOCAL_MACHINE,
+                NativeMethods.MemoryManagementKey,
+                0,
+                NativeMethods.KEY_QUERY_VALUE,
+                out IntPtr key) != NativeMethods.ERROR_SUCCESS)
+        {
+            return Array.Empty<string>();
+        }
+
+        try
+        {
+            int size = 0;
+            if (NativeMethods.RegQueryValueExW(
+                    key, NativeMethods.PagingFilesValue, IntPtr.Zero, out uint type, null, ref size)
+                != NativeMethods.ERROR_SUCCESS
+                || type != NativeMethods.REG_MULTI_SZ
+                || size <= 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            byte[] data = new byte[size];
+            if (NativeMethods.RegQueryValueExW(
+                    key, NativeMethods.PagingFilesValue, IntPtr.Zero, out type, data, ref size)
+                != NativeMethods.ERROR_SUCCESS)
+            {
+                return Array.Empty<string>();
+            }
+
+            var paths = new List<string>();
+            foreach (string entry in Encoding.Unicode.GetString(data)
+                         .Split('\0', StringSplitOptions.RemoveEmptyEntries))
+            {
+                // 每项形如 "path [初始大小] [最大值]"，取首个空白分隔 token 为路径；
+                // 无法展开为盘符形式的路径（如 \Device\HarddiskVolumeN）由 Core 侧自然跳过。
+                string expanded = Environment.ExpandEnvironmentVariables(entry).Trim();
+                if (expanded.StartsWith(@"\??\", StringComparison.Ordinal))
+                {
+                    expanded = expanded[4..];
+                }
+
+                string[] tokens = expanded.Split(
+                    new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                if (tokens.Length > 0 && tokens[0].Length > 0)
+                {
+                    paths.Add(tokens[0]);
+                }
+            }
+
+            return paths;
+        }
+        finally
+        {
+            NativeMethods.RegCloseKey(key);
+        }
+    }
+
+    /// <inheritdoc />
+    public bool IsDynamicOrSpacesMember(int diskNumber)
+    {
+        string path = $@"\\.\PhysicalDrive{diskNumber}";
+        using SafeFileHandle handle = NativeMethods.CreateFileW(
+            path,
+            NativeMethods.GENERIC_READ,
+            NativeMethods.FILE_SHARE_READ_WRITE,
+            IntPtr.Zero,
+            NativeMethods.OPEN_EXISTING,
+            0,
+            IntPtr.Zero);
+        if (handle.IsInvalid)
+        {
+            return false;
+        }
+
+        // LDM 分区表：MBR 动态盘含类型 0x42 分区；GPT 动态盘/Storage Spaces 成员
+        // 含 LDM/Space 专用分区（见 SpecialPartitionGuids）。
+        byte[] mbr = new byte[NativeMethods.SectorSize];
+        if (!TryReadAt(handle, 0, mbr)
+            || mbr[510] != 0x55
+            || mbr[511] != 0xAA)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < 4; i++)
+        {
+            byte type = mbr[0x1BE + i * 16 + 2];
+            if (type == NativeMethods.MbrPartitionTypeLdm)
+            {
+                return true;
+            }
+
+            if (type == NativeMethods.MbrPartitionTypeGptProtective)
+            {
+                return HasSpecialGptPartition(handle);
+            }
+        }
+
+        return false;
+    }
+
+    /// <inheritdoc />
+    public bool ProbeAtaPassThrough(int diskNumber)
+    {
+        string path = $@"\\.\PhysicalDrive{diskNumber}";
+        byte[] identifyData = new byte[NativeMethods.IdentifyDataLength];
+        return TryRunAtaIdentifyDevice(path, identifyData);
+    }
+
+    private static string? QueryFixedPath(Func<StringBuilder, uint, uint> getter)
+    {
+        var buffer = new StringBuilder(261);
+        return getter(buffer, (uint)buffer.Capacity) == 0 ? null : buffer.ToString();
+    }
+
+    private static void TryAddDriveLetter(List<string> letters, string? path)
+    {
+        if (path is { Length: >= 2 } && path[1] == ':' && char.IsLetter(path[0]))
+        {
+            string letter = char.ToUpperInvariant(path[0]).ToString();
+            if (!letters.Contains(letter, StringComparer.OrdinalIgnoreCase))
+            {
+                letters.Add(letter);
+            }
+        }
+    }
+
+    private static bool TryReadAt(SafeFileHandle handle, long offset, byte[] buffer)
+    {
+        // 物理盘读取按扇区对齐，单次 ReadFile 即返回全部请求字节；不足视为失败。
+        if (!NativeMethods.SetFilePointerEx(handle, offset, out _, NativeMethods.FILE_BEGIN))
+        {
+            return false;
+        }
+
+        return NativeMethods.ReadFile(handle, buffer, (uint)buffer.Length, out uint read, IntPtr.Zero)
+            && read == (uint)buffer.Length;
+    }
+
+    /// <summary>
+    /// 已知特殊分区类型 GUID（GPT 条目首 16 字节）：动态盘 LDM 元数据/数据、Storage Spaces 成员元数据。
+    /// 依据 Microsoft GPT 分区类型登记，属尽力探测：未收录的新变体不误报，由真机手测清单兜底。
+    /// </summary>
+    private static readonly byte[][] SpecialPartitionGuids =
+    {
+        new Guid("AF9B60A0-141F-4C4B-A649-3FB3F3721B3C").ToByteArray(), // Microsoft LDM metadata
+        new Guid("5808C8AA-7E8F-42E0-85D2-E1E90A24CD2B").ToByteArray(), // Microsoft LDM data
+        new Guid("E8D3AA94-01F7-4BF0-9A5C-5FEB14E6E7A4").ToByteArray(), // MSFT Space metadata
+    };
+
+    private static bool HasSpecialGptPartition(SafeFileHandle handle)
+    {
+        byte[] header = new byte[NativeMethods.SectorSize];
+        if (!TryReadAt(handle, NativeMethods.SectorSize, header)
+            || Encoding.ASCII.GetString(header, 0, NativeMethods.GptHeaderSignature.Length)
+               != NativeMethods.GptHeaderSignature)
+        {
+            return false;
+        }
+
+        ulong entryLba = BitConverter.ToUInt64(header, NativeMethods.GptEntryLbaOffset);
+        uint entryCount = BitConverter.ToUInt32(header, NativeMethods.GptEntryCountOffset);
+        uint entrySize = BitConverter.ToUInt32(header, NativeMethods.GptEntrySizeOffset);
+        if (entryCount == 0
+            || entryCount > 1024
+            || entrySize < 16
+            || entrySize > 4096)
+        {
+            return false;
+        }
+
+        byte[] entries = new byte[entryCount * entrySize];
+        if (!TryReadAt(handle, (long)entryLba * NativeMethods.SectorSize, entries))
+        {
+            return false;
+        }
+
+        for (int i = 0; i < entryCount; i++)
+        {
+            ReadOnlySpan<byte> typeGuid = entries.AsSpan((int)(i * entrySize), 16);
+            foreach (byte[] known in SpecialPartitionGuids)
+            {
+                if (typeGuid.SequenceEqual(known))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// 经 IOCTL_ATA_PASS_THROUGH_DIRECT 同步执行 IDENTIFY DEVICE：
+    /// 打开 RW 句柄失败或 IOCTL 失败（如 Intel RST/RAID 驱动拒绝 pass-through）返回 false。
+    /// </summary>
+    private static unsafe bool TryRunAtaIdentifyDevice(string physicalDrivePath, byte[] identifyData)
+    {
+        using SafeFileHandle handle = NativeMethods.CreateFileW(
+            physicalDrivePath,
+            NativeMethods.GENERIC_READ | NativeMethods.GENERIC_WRITE,
+            NativeMethods.FILE_SHARE_READ_WRITE,
+            IntPtr.Zero,
+            NativeMethods.OPEN_EXISTING,
+            0,
+            IntPtr.Zero);
+        if (handle.IsInvalid)
+        {
+            return false;
+        }
+
+        fixed (byte* data = identifyData)
+        {
+            var passthrough = default(NativeMethods.ATA_PASS_THROUGH_DIRECT);
+            passthrough.Length = (ushort)sizeof(NativeMethods.ATA_PASS_THROUGH_DIRECT);
+            passthrough.AtaFlags = NativeMethods.AtaFlagsDataIn | NativeMethods.AtaFlagsUseDma;
+            passthrough.DataTransferLength = NativeMethods.IdentifyDataLength;
+            passthrough.TimeOutValue = 2;
+            passthrough.DataBuffer = (IntPtr)data;
+            passthrough.CurrentTaskFile[5] = NativeMethods.AtaDeviceHeadA0;
+            passthrough.CurrentTaskFile[6] = NativeMethods.AtaCommandIdentifyDevice;
+
+            return NativeMethods.DeviceIoControl(
+                handle,
+                NativeMethods.IOCTL_ATA_PASS_THROUGH_DIRECT,
+                (IntPtr)(&passthrough),
+                (uint)sizeof(NativeMethods.ATA_PASS_THROUGH_DIRECT),
+                (IntPtr)(&passthrough),
+                (uint)sizeof(NativeMethods.ATA_PASS_THROUGH_DIRECT),
+                out _,
+                IntPtr.Zero);
+        }
     }
 
     /// <inheritdoc />
@@ -234,63 +494,6 @@ public sealed class NativeDiskDeviceOps : IDiskDeviceOps
         }
 
         return Encoding.ASCII.GetString(new ReadOnlySpan<byte>(pointer, length)).Trim();
-    }
-
-    private static unsafe bool? TryGetRotationFromIdentify(string physicalDrivePath)
-    {
-        using SafeFileHandle handle = NativeMethods.CreateFileW(
-            physicalDrivePath,
-            NativeMethods.GENERIC_READ | NativeMethods.GENERIC_WRITE,
-            NativeMethods.FILE_SHARE_READ_WRITE,
-            IntPtr.Zero,
-            NativeMethods.OPEN_EXISTING,
-            0,
-            IntPtr.Zero);
-        if (handle.IsInvalid)
-        {
-            return null;
-        }
-
-        byte* identifyData = stackalloc byte[(int)NativeMethods.IdentifyDataLength];
-        new Span<byte>(identifyData, (int)NativeMethods.IdentifyDataLength).Clear();
-
-        var passthrough = default(NativeMethods.ATA_PASS_THROUGH_DIRECT);
-        passthrough.Length = (ushort)sizeof(NativeMethods.ATA_PASS_THROUGH_DIRECT);
-        passthrough.AtaFlags = NativeMethods.AtaFlagsDataIn | NativeMethods.AtaFlagsUseDma;
-        passthrough.DataTransferLength = NativeMethods.IdentifyDataLength;
-        passthrough.TimeOutValue = 2;
-        passthrough.DataBuffer = (IntPtr)identifyData;
-        passthrough.CurrentTaskFile[5] = NativeMethods.AtaDeviceHeadA0;
-        passthrough.CurrentTaskFile[6] = NativeMethods.AtaCommandIdentifyDevice;
-
-        if (!NativeMethods.DeviceIoControl(
-                handle,
-                NativeMethods.IOCTL_ATA_PASS_THROUGH_DIRECT,
-                (IntPtr)(&passthrough),
-                (uint)sizeof(NativeMethods.ATA_PASS_THROUGH_DIRECT),
-                (IntPtr)(&passthrough),
-                (uint)sizeof(NativeMethods.ATA_PASS_THROUGH_DIRECT),
-                out _,
-                IntPtr.Zero))
-        {
-            return null;
-        }
-
-        ushort rotationRate = (ushort)(
-            identifyData[NativeMethods.IdentifyWord189ByteOffset]
-            | (identifyData[NativeMethods.IdentifyWord189ByteOffset + 1] << 8));
-        if (rotationRate == NativeMethods.RotationRateNonRotating)
-        {
-            return false;
-        }
-
-        if (rotationRate > NativeMethods.RotationRateRpmThreshold)
-        {
-            return true;
-        }
-
-        // 0 或保留值：未报告，交由调用方走 property query 兜底。
-        return null;
     }
 
     private static unsafe bool? TryGetSeekPenaltyProperty(string physicalDrivePath)
