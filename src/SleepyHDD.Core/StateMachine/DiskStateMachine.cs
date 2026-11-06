@@ -9,6 +9,7 @@ namespace SleepyHDD.Core.StateMachine;
 /// 绝不发送 SLEEP (0xE6)。离线在休眠全部步骤之上追加置磁盘离线属性（卷从系统消失），
 /// 休眠↔离线互转保持卷锁、只增减离线属性；离线唤醒先清属性（卷自动重新挂载）再解锁。
 /// 锁定失败则查询占用进程并回滚已锁卷。同一磁盘的操作经信号量串行，不同磁盘的操作并行执行。
+/// 全局操作（全部休眠/离线/唤醒）跳过受限盘、逐盘并行发起，单盘失败不影响其余盘。
 /// </summary>
 public sealed class DiskStateMachine
 {
@@ -47,6 +48,38 @@ public sealed class DiskStateMachine
     /// <summary>唤醒：离线时先清离线属性使卷重新挂载，再解锁全部卷（对未锁定的卷为无害空操作），移除状态文件记录。</summary>
     public Task<DiskOperationResult> WakeAsync(ManagedDisk disk) =>
         RunExclusiveAsync(disk.DiskNumber, () => WakeCoreAsync(disk));
+
+    /// <summary>全局休眠：跳过受限盘，其余各盘并行发起、按盘串行排队；单盘失败不影响其余盘。</summary>
+    public Task<IReadOnlyList<DiskOperationOutcome>> SleepAllAsync(IReadOnlyList<ManagedDisk> disks) =>
+        RunOnAllAsync(disks, SleepAsync);
+
+    /// <summary>全局离线：跳过受限盘，其余各盘并行发起、按盘串行排队；单盘失败不影响其余盘。</summary>
+    public Task<IReadOnlyList<DiskOperationOutcome>> OfflineAllAsync(IReadOnlyList<ManagedDisk> disks) =>
+        RunOnAllAsync(disks, OfflineAsync);
+
+    /// <summary>全局唤醒：跳过受限盘，其余各盘并行发起、按盘串行排队；单盘失败不影响其余盘。</summary>
+    public Task<IReadOnlyList<DiskOperationOutcome>> WakeAllAsync(IReadOnlyList<ManagedDisk> disks) =>
+        RunOnAllAsync(disks, WakeAsync);
+
+    /// <summary>
+    /// 全局编排：对全部非受限盘并行发起指定转换（跨盘并行、同盘经既有信号量串行），
+    /// 汇总每盘结果；任一盘的失败不会中断其余盘的操作。
+    /// </summary>
+    private static async Task<IReadOnlyList<DiskOperationOutcome>> RunOnAllAsync(
+        IReadOnlyList<ManagedDisk> disks,
+        Func<ManagedDisk, Task<DiskOperationResult>> operation)
+    {
+        var tasks = disks
+            .Where(disk => !disk.IsRestricted)
+            .Select(async disk => new DiskOperationOutcome
+            {
+                DiskNumber = disk.DiskNumber,
+                Result = await operation(disk).ConfigureAwait(false),
+            })
+            .ToArray();
+
+        return await Task.WhenAll(tasks).ConfigureAwait(false);
+    }
 
     private async Task<DiskOperationResult> RunExclusiveAsync(
         int diskNumber,
