@@ -11,7 +11,7 @@ using SleepyHDD.Core.Store;
 namespace SleepyHDD.App.ViewModels;
 
 /// <summary>
-/// 受管磁盘卡片展示项：受限盘仅以红字徽章说明原因、无任何动作按钮（DESIGN.md 4.1）；
+/// 可操作的磁盘卡片展示项：受限盘仅以红字徽章说明原因、无任何动作按钮（DESIGN.md 4.1）；
 /// 正常盘按单按钮表动作（在线→默认动作[休眠/离线，随设置切换]，休眠/离线→唤醒），
 /// 徽章在线绿/休眠黄/离线灰（保护模式，tickets #4/#5）。
 /// </summary>

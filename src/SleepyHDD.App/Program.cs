@@ -38,6 +38,12 @@ namespace SleepyHDD.App
         /// </summary>
         private static bool EnsureWindowsAppRuntime()
         {
+#if MICROSOFT_WINDOWSAPPSDK_SELFCONTAINED
+            // 自包含发布（单文件模式的官方前提）：Windows App Runtime 已随应用本地部署，
+            // 此模式下不得调用 Bootstrap——它会加载机器上的框架包 runtime，与本地 runtime
+            // 在同一进程冲突，导致 XAML 初始化 fail-fast（0xC0000602）启动即崩。
+            return true;
+#else
             while (true)
             {
                 if (RuntimeCheck.DecideFromBootstrapResult(TryBootstrap()) == RuntimeCheckAction.ContinueStartup)
@@ -67,6 +73,7 @@ namespace SleepyHDD.App
                     return false;
                 }
             }
+#endif
         }
 
         private static bool TryBootstrap()

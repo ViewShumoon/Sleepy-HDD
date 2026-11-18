@@ -3,7 +3,7 @@ using SleepyHDD.Core.Devices;
 namespace SleepyHDD.Core.Inventory;
 
 /// <summary>
-/// 磁盘清单：经 IDiskDeviceOps 缝隙枚举设备并判定受管机械盘。
+/// 磁盘清单：经 IDiskDeviceOps 缝隙枚举设备并判定可操作的机械盘。
 /// </summary>
 public sealed class DiskInventory
 {
@@ -23,7 +23,7 @@ public sealed class DiskInventory
     }
 
     /// <summary>
-    /// 枚举受管磁盘（含其上的卷），按物理盘编号排序。
+    /// 枚举可操作的磁盘（含其上的卷），按物理盘编号排序。
     /// </summary>
     public IReadOnlyList<ManagedDisk> EnumerateManagedDisks()
     {

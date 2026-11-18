@@ -112,12 +112,12 @@ public sealed class TrayIconController : IDisposable
         }
 
         _flyout.Items.Clear();
-        _flyout.Items.Add(Item("打开主窗口", ShowMainWindow));
+        _flyout.Items.Add(Item("显示", ShowMainWindow));
         _flyout.Items.Add(new MenuFlyoutSeparator());
 
         if (entries.Count == 0)
         {
-            _flyout.Items.Add(new MenuFlyoutItem { Text = "无受管磁盘", IsEnabled = false });
+            _flyout.Items.Add(new MenuFlyoutItem { Text = "无可管理磁盘", IsEnabled = false });
         }
         else
         {

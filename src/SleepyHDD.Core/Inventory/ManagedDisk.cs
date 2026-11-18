@@ -3,7 +3,7 @@ using SleepyHDD.Core.Devices;
 namespace SleepyHDD.Core.Inventory;
 
 /// <summary>
-/// 判定为受管的机械硬盘及其上的卷。
+/// 判定为可操作的的机械硬盘及其上的卷。
 /// </summary>
 public sealed record ManagedDisk
 {

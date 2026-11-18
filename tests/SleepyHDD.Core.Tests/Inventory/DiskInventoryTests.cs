@@ -5,7 +5,7 @@ using SleepyHDD.Core.Tests.Fakes;
 namespace SleepyHDD.Core.Tests.Inventory;
 
 /// <summary>
-/// 受管判定缝隙：DiskInventory.EnumerateManagedDisks 经 fake IDiskDeviceOps 验证。
+/// 可操作的判定缝隙：DiskInventory.EnumerateManagedDisks 经 fake IDiskDeviceOps 验证。
 /// </summary>
 public class DiskInventoryTests
 {

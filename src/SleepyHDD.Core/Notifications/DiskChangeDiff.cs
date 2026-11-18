@@ -3,7 +3,7 @@ using SleepyHDD.Core.Inventory;
 namespace SleepyHDD.Core.Notifications;
 
 /// <summary>
-/// 磁盘插拔差异计算：比较两次受管磁盘枚举结果，按序列号匹配得出新增/移除，
+/// 磁盘插拔差异计算：比较两次可操作的磁盘枚举结果，按序列号匹配得出新增/移除，
 /// 供托盘生成"磁盘已接入/已移除"通知（票 #7；序列号匹配不受盘符/盘号变化影响，同 ADR-0005）。
 /// </summary>
 public static class DiskChangeDiff

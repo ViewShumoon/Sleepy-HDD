@@ -1,7 +1,7 @@
 namespace SleepyHDD.Core.Inventory;
 
 /// <summary>
-/// 受限原因（GLOSSARY：受限=受管磁盘因系统原因不可被操作）。
+/// 受限原因（GLOSSARY：受限=可操作的磁盘因系统原因不可被操作）。
 /// 声明顺序即判定优先级：一块盘命中多个原因时，排在前面者为主因。
 /// </summary>
 public enum RestrictedReason

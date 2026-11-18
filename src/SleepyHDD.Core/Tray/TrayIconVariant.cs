@@ -5,7 +5,7 @@ namespace SleepyHDD.Core.Tray;
 /// </summary>
 public enum TrayIconVariant
 {
-    /// <summary>没有受管磁盘处于休眠/离线。</summary>
+    /// <summary>没有可操作的磁盘处于休眠/离线。</summary>
     Normal,
 
     /// <summary>任一磁盘处于休眠/离线，显示"睡眠"变体。</summary>

@@ -15,7 +15,7 @@ using SleepyHDD.Core.Store;
 namespace SleepyHDD.App.ViewModels;
 
 /// <summary>
-/// 主窗口视图模型：持有受管磁盘卡片集合与空态标记，并把状态机的后台状态事件编组回 UI 线程；
+/// 主窗口视图模型：持有可操作的磁盘卡片集合与空态标记，并把状态机的后台状态事件编组回 UI 线程；
 /// 顶栏全局按钮（全部休眠/离线随默认动作 + 全部唤醒）与设置页切换也在此编排（票 #6，DESIGN.md 4.1/4.2）。
 /// </summary>
 public sealed partial class MainViewModel : ObservableObject
@@ -39,22 +39,22 @@ public sealed partial class MainViewModel : ObservableObject
         Disks.CollectionChanged += OnDisksChanged;
     }
 
-    /// <summary>受管磁盘卡片。</summary>
+    /// <summary>可操作的磁盘卡片。</summary>
     public ObservableCollection<DiskCardViewModel> Disks { get; } = new();
 
-    /// <summary>当前受管磁盘快照（含卷）：生命周期退出唤醒复用已枚举结果，避免退出时重新枚举（票 #9）。</summary>
+    /// <summary>当前可操作的磁盘快照（含卷）：生命周期退出唤醒复用已枚举结果，避免退出时重新枚举（票 #9）。</summary>
     public IReadOnlyList<ManagedDisk> ManagedDisksSnapshot => _managedDisks;
 
-    /// <summary>受管磁盘热插拔增删事件（新增, 移除）；首次刷新不触发，托盘据此发通知（票 #7）。</summary>
+    /// <summary>可操作的磁盘热插拔增删事件（新增, 移除）；首次刷新不触发，托盘据此发通知（票 #7）。</summary>
     public event Action<IReadOnlyList<ManagedDisk>, IReadOnlyList<ManagedDisk>>? DiskPlugChanged;
 
     /// <summary>共享设置视图模型（设置页与卡片按钮绑定用）。</summary>
     public SettingsViewModel Settings => _settings;
 
-    /// <summary>无受管磁盘时显示空态。</summary>
+    /// <summary>无可操作的磁盘时显示空态。</summary>
     public bool IsEmpty => Disks.Count == 0;
 
-    /// <summary>有受管磁盘时显示列表。</summary>
+    /// <summary>有可操作的磁盘时显示列表。</summary>
     public bool HasDisks => Disks.Count > 0;
 
     /// <summary>顶栏全局动作按钮文案：跟随默认动作设置。</summary>
@@ -64,7 +64,7 @@ public sealed partial class MainViewModel : ObservableObject
     public string AppVersion { get; } =
         typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
 
-    /// <summary>顶栏标题：磁盘列表为"受管磁盘"，设置页为"设置"。</summary>
+    /// <summary>顶栏标题：磁盘列表为"可操作的磁盘"，设置页为"设置"。</summary>
     public string HeaderText => ShowSettings ? "设置" : "机械硬盘";
 
     /// <summary>当前显示设置页。</summary>
@@ -92,7 +92,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     private bool CanRunGlobal() => !IsGlobalBusy;
 
-    /// <summary>重新枚举受管磁盘并刷新卡片集合，卡片初始状态取状态机当前值；与上次枚举比对得出插拔增删并通知订阅方。</summary>
+    /// <summary>重新枚举可操作的磁盘并刷新卡片集合，卡片初始状态取状态机当前值；与上次枚举比对得出插拔增删并通知订阅方。</summary>
     public void Refresh()
     {
         var disks = _inventory.EnumerateManagedDisks().ToList();
@@ -125,7 +125,7 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void CloseSettings() => ShowSettings = false;
 
-    /// <summary>全局动作（按默认动作对全部受管磁盘执行休眠或离线）；受限盘跳过，单盘失败不影响其余。</summary>
+    /// <summary>全局动作（按默认动作对全部可操作的磁盘执行休眠或离线）；受限盘跳过，单盘失败不影响其余。</summary>
     [RelayCommand(CanExecute = nameof(CanRunGlobal))]
     private async Task DefaultActionAllAsync()
     {
@@ -141,7 +141,7 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>全局唤醒（对全部受管磁盘执行唤醒）；受限盘跳过，单盘失败不影响其余。</summary>
+    /// <summary>全局唤醒（对全部可操作的磁盘执行唤醒）；受限盘跳过，单盘失败不影响其余。</summary>
     [RelayCommand(CanExecute = nameof(CanRunGlobal))]
     private async Task WakeAllAsync()
     {

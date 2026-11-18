@@ -120,7 +120,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     // ---- 新增策略对话框编辑态（ContentDialog 绑定；由 code-behind 打开并提交） ----
 
-    /// <summary>对话框候选磁盘：仅当前非受限的受管盘。</summary>
+    /// <summary>对话框候选磁盘：仅当前非受限的可操作的盘。</summary>
     public IReadOnlyList<DiskOption> DialogDisks =>
         _availableDisks
             .Where(disk => !disk.IsRestricted)

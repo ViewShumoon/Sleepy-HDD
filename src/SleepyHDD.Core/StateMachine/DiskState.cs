@@ -1,7 +1,7 @@
 namespace SleepyHDD.Core.StateMachine;
 
 /// <summary>
-/// 受管磁盘的软件视角状态（术语见 GLOSSARY.md；受限为展示态，不在此枚举内）。
+/// 可操作的磁盘的软件视角状态（术语见 GLOSSARY.md；受限为展示态，不在此枚举内）。
 /// </summary>
 public enum DiskState
 {

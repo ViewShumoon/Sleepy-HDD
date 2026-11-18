@@ -41,7 +41,7 @@ public sealed partial class ScheduleRowViewModel : ObservableObject
     /// <summary>本行删除命令；由 SettingsViewModel 创建行时挂接（模板内 ElementName 受名称作用域限制不可用）。</summary>
     public IRelayCommand? DeleteCommand { get; internal set; }
 
-    /// <summary>磁盘展示名：在线受管盘用型号，磁盘缺失时退回序列号。</summary>
+    /// <summary>磁盘展示名：在线可操作的盘用型号，磁盘缺失时退回序列号。</summary>
     [ObservableProperty]
     private string _diskLabel;
 

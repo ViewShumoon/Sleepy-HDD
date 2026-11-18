@@ -18,13 +18,13 @@ public static class NotificationMessages
         };
     }
 
-    /// <summary>受管磁盘接入通知。</summary>
+    /// <summary>可操作的磁盘接入通知。</summary>
     public static NotificationMessage DiskArrived(string model) =>
-        new("磁盘已接入", $"{model} 已加入受管磁盘列表。");
+        new("磁盘已接入", $"{model} 已加入可操作的磁盘列表。");
 
-    /// <summary>受管磁盘移除通知。</summary>
+    /// <summary>可操作的磁盘移除通知。</summary>
     public static NotificationMessage DiskRemoved(string model) =>
-        new("磁盘已移除", $"{model} 已从受管磁盘列表移除。");
+        new("磁盘已移除", $"{model} 已从可操作的磁盘列表移除。");
 
     /// <summary>定时任务完成通知（票 #10，用户故事 16）。</summary>
     public static NotificationMessage ScheduleSucceeded(string model, ScheduleTargetState target) =>

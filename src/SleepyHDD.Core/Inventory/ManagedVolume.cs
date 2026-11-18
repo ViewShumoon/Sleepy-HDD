@@ -1,7 +1,7 @@
 namespace SleepyHDD.Core.Inventory;
 
 /// <summary>
-/// 受管磁盘上挂载了盘符的卷。
+/// 可操作的磁盘上挂载了盘符的卷。
 /// </summary>
 public sealed record ManagedVolume
 {

@@ -1,7 +1,7 @@
 namespace SleepyHDD.Core.Devices;
 
 /// <summary>
-/// 物理磁盘的原始描述，由设备层枚举产生，不含受管判定。
+/// 物理磁盘的原始描述，由设备层枚举产生，不含可操作的判定。
 /// </summary>
 public sealed record DiskDescriptor
 {

@@ -132,7 +132,7 @@
             <!-- 磁盘视图：卡片列表 / 空态 -->
             <Grid Visibility="{Binding IsDiskViewVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
 
-                <!-- 空态：未发现受管机械盘 -->
+                <!-- 空态：未发现可操作的机械盘 -->
                 <StackPanel
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
@@ -147,7 +147,7 @@
                     <TextBlock
                         HorizontalAlignment="Center"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Text="未发现受管的机械硬盘" />
+                        Text="未发现可操作的机械硬盘" />
                 </StackPanel>
 
                 <!-- 磁盘卡片列表 -->
