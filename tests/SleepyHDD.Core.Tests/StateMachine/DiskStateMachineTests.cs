@@ -247,7 +247,7 @@ public class DiskStateMachineTests
     }
 
     [Fact]
-    public void OfflineAsync_FromSleeping_KeepsLocksAndOnlySetsAttribute()
+    public void OfflineAsync_FromSleeping_ReassertsStandbyThenSetsAttribute()
     {
         var fake = new FakeDiskDeviceOps();
         var store = new FakeStateStore();
@@ -260,8 +260,8 @@ public class DiskStateMachineTests
         var result = machine.OfflineAsync(disk).GetAwaiter().GetResult();
 
         Assert.True(result.Success);
-        // 休眠→离线：保持锁定、绝不重复锁定/解锁，仅追加置离线属性。
-        Assert.Equal(new[] { "set-offline:1" }, fake.Calls);
+        // 休眠→离线：重发停转消除停转歧义（ADR-0006）、保持锁定（绝不重复锁定/解锁），再置离线属性。
+        Assert.Equal(new[] { "standby:1", "set-offline:1" }, fake.Calls);
         Assert.Equal(DiskState.Offline, machine.GetState("HDD1"));
         Assert.Equal(new[] { "record:HDD1:Sleeping", "record:HDD1:Offline" }, store.Calls);
     }
@@ -282,13 +282,13 @@ public class DiskStateMachineTests
 
         Assert.False(result.Success);
         // 置属性失败：保持休眠态与卷锁，不回滚、不降级记录。
-        Assert.Equal(new[] { "set-offline:1" }, fake.Calls);
+        Assert.Equal(new[] { "standby:1", "set-offline:1" }, fake.Calls);
         Assert.Equal(DiskState.Sleeping, machine.GetState("HDD1"));
         Assert.Equal(new[] { "record:HDD1:Sleeping" }, store.Calls);
     }
 
     [Fact]
-    public void SleepAsync_FromOffline_ClearsAttributeAndKeepsLocks()
+    public void SleepAsync_FromOffline_ReassertsStandbyThenClearsAttribute()
     {
         var fake = new FakeDiskDeviceOps();
         var store = new FakeStateStore();
@@ -301,10 +301,32 @@ public class DiskStateMachineTests
         var result = machine.SleepAsync(disk).GetAwaiter().GetResult();
 
         Assert.True(result.Success);
-        // 离线→休眠：仅清离线属性，保持卷锁（不解锁、不重新停转）。
-        Assert.Equal(new[] { "clear-offline:1" }, fake.Calls);
+        // 离线→休眠：重发停转消除停转歧义（ADR-0006），再清离线属性，保持卷锁（不解锁）。
+        Assert.Equal(new[] { "standby:1", "clear-offline:1" }, fake.Calls);
         Assert.Equal(DiskState.Sleeping, machine.GetState("HDD1"));
         Assert.Equal(new[] { "record:HDD1:Offline", "record:HDD1:Sleeping" }, store.Calls);
+    }
+
+    [Fact]
+    public void SleepAsync_FromOffline_StandbyFails_StaysOfflineWithoutAttributeChange()
+    {
+        var fake = new FakeDiskDeviceOps();
+        var store = new FakeStateStore();
+        var machine = new DiskStateMachine(fake, store);
+        var disk = TwoVolumeDisk();
+
+        machine.OfflineAsync(disk).GetAwaiter().GetResult();
+        fake.StandbyFailures.Add(1);
+        fake.Calls.Clear();
+
+        var result = machine.SleepAsync(disk).GetAwaiter().GetResult();
+
+        Assert.False(result.Success);
+        Assert.NotNull(result.Message);
+        // 停转失败：中止转换，不动离线属性，状态与记录保持离线。
+        Assert.Equal(new[] { "standby:1" }, fake.Calls);
+        Assert.Equal(DiskState.Offline, machine.GetState("HDD1"));
+        Assert.Equal(new[] { "record:HDD1:Offline" }, store.Calls);
     }
 
     [Fact]
@@ -322,7 +344,7 @@ public class DiskStateMachineTests
         var result = machine.SleepAsync(disk).GetAwaiter().GetResult();
 
         Assert.False(result.Success);
-        Assert.Equal(new[] { "clear-offline:1" }, fake.Calls);
+        Assert.Equal(new[] { "standby:1", "clear-offline:1" }, fake.Calls);
         Assert.Equal(DiskState.Offline, machine.GetState("HDD1"));
         Assert.Equal(new[] { "record:HDD1:Offline" }, store.Calls);
     }
@@ -410,6 +432,113 @@ public class DiskStateMachineTests
         // 另一块盘占用原盘号不会被误归属状态（DESIGN.md 2.7 按序列号匹配）。
         Assert.Equal(DiskState.Sleeping, machine.GetState("HDD1"));
         Assert.Equal(DiskState.Online, machine.GetState("HDD9"));
+    }
+
+    [Fact]
+    public void SleepAsync_OnSleepingDisk_ReassertsStandbyOnly()
+    {
+        var fake = new FakeDiskDeviceOps();
+        var store = new FakeStateStore();
+        var machine = new DiskStateMachine(fake, store);
+        var disk = TwoVolumeDisk();
+
+        machine.SleepAsync(disk).GetAwaiter().GetResult();
+        fake.Calls.Clear();
+
+        var result = machine.SleepAsync(disk).GetAwaiter().GetResult();
+
+        // 重新断言（ADR-0006）：自行起转后一次点击再休眠，只重发停转，
+        // 绝不重做锁卷/卸载/刷缓存——刷缓存会使沉睡盘起转。
+        Assert.True(result.Success);
+        Assert.Equal(new[] { "standby:1" }, fake.Calls);
+        Assert.Equal(DiskState.Sleeping, machine.GetState("HDD1"));
+        // 状态未变：不重复写状态文件。
+        Assert.Equal(new[] { "record:HDD1:Sleeping" }, store.Calls);
+    }
+
+    [Fact]
+    public void SleepAsync_OnSleepingDisk_ReassertStandbyFails_KeepsStateAndReports()
+    {
+        var fake = new FakeDiskDeviceOps();
+        var store = new FakeStateStore();
+        var machine = new DiskStateMachine(fake, store);
+        var disk = TwoVolumeDisk();
+
+        machine.SleepAsync(disk).GetAwaiter().GetResult();
+        fake.StandbyFailures.Add(1);
+        fake.Calls.Clear();
+
+        var result = machine.SleepAsync(disk).GetAwaiter().GetResult();
+
+        Assert.False(result.Success);
+        Assert.NotNull(result.Message);
+        Assert.Equal(new[] { "standby:1" }, fake.Calls);
+        Assert.Equal(DiskState.Sleeping, machine.GetState("HDD1"));
+        Assert.Equal(new[] { "record:HDD1:Sleeping" }, store.Calls);
+    }
+
+    [Fact]
+    public void OfflineAsync_OnOfflineDisk_ReassertsStandbyThenAttribute()
+    {
+        var fake = new FakeDiskDeviceOps();
+        var store = new FakeStateStore();
+        var machine = new DiskStateMachine(fake, store);
+        var disk = TwoVolumeDisk();
+
+        machine.OfflineAsync(disk).GetAwaiter().GetResult();
+        fake.Calls.Clear();
+
+        var result = machine.OfflineAsync(disk).GetAwaiter().GetResult();
+
+        Assert.True(result.Success);
+        // 重新断言（ADR-0006）：重发停转 + 置离线属性，跳过锁卷/卸载/刷缓存。
+        Assert.Equal(new[] { "standby:1", "set-offline:1" }, fake.Calls);
+        Assert.Equal(DiskState.Offline, machine.GetState("HDD1"));
+        Assert.Equal(new[] { "record:HDD1:Offline" }, store.Calls);
+    }
+
+    [Fact]
+    public void OfflineAsync_OnOfflineDisk_ReassertStandbyFails_SkipsAttribute()
+    {
+        var fake = new FakeDiskDeviceOps();
+        var store = new FakeStateStore();
+        var machine = new DiskStateMachine(fake, store);
+        var disk = TwoVolumeDisk();
+
+        machine.OfflineAsync(disk).GetAwaiter().GetResult();
+        fake.StandbyFailures.Add(1);
+        fake.Calls.Clear();
+
+        var result = machine.OfflineAsync(disk).GetAwaiter().GetResult();
+
+        Assert.False(result.Success);
+        Assert.NotNull(result.Message);
+        // 停转失败：中止再断言，不再重置属性，状态与记录保持离线。
+        Assert.Equal(new[] { "standby:1" }, fake.Calls);
+        Assert.Equal(DiskState.Offline, machine.GetState("HDD1"));
+        Assert.Equal(new[] { "record:HDD1:Offline" }, store.Calls);
+    }
+
+    [Fact]
+    public void OfflineAsync_OnOfflineDisk_ReassertSetOfflineFails_KeepsStateAndReports()
+    {
+        var fake = new FakeDiskDeviceOps();
+        var store = new FakeStateStore();
+        var machine = new DiskStateMachine(fake, store);
+        var disk = TwoVolumeDisk();
+
+        machine.OfflineAsync(disk).GetAwaiter().GetResult();
+        fake.SetOfflineFailures.Add(1);
+        fake.Calls.Clear();
+
+        var result = machine.OfflineAsync(disk).GetAwaiter().GetResult();
+
+        Assert.False(result.Success);
+        Assert.NotNull(result.Message);
+        // 置属性失败：停转已重发，状态与记录保持离线，不重复写状态文件。
+        Assert.Equal(new[] { "standby:1", "set-offline:1" }, fake.Calls);
+        Assert.Equal(DiskState.Offline, machine.GetState("HDD1"));
+        Assert.Equal(new[] { "record:HDD1:Offline" }, store.Calls);
     }
 
     private static ManagedDisk TwoVolumeDisk() => Disk(

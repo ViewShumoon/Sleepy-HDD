@@ -7,8 +7,10 @@ namespace SleepyHDD.Core.StateMachine;
 /// <summary>
 /// 转休眠/转离线/唤醒编排（保护模式）：逐卷锁定→卸载，再 CACHE FLUSH (0xE7) + STANDBY IMMEDIATE (0xE0)；
 /// 绝不发送 SLEEP (0xE6)。离线在休眠全部步骤之上追加置磁盘离线属性（卷从系统消失），
-/// 休眠↔离线互转保持卷锁、只增减离线属性；离线唤醒先清属性（卷自动重新挂载）再解锁。
+/// 休眠↔离线互转保持卷锁、先重发停转消除停转歧义再增减离线属性；离线唤醒先清属性（卷自动重新挂载）再解锁。
 /// 锁定失败则查询占用进程并回滚已锁卷。同一磁盘的操作经信号量串行，不同磁盘的操作并行执行。
+/// 对已处于目标态的盘，休眠/离线 = 重新断言（只重发停转/离线属性，ADR-0006），
+/// 自行起转时"全部休眠/全部离线"即一次点击的再休眠入口。
 /// 全局操作（全部休眠/离线/唤醒）跳过受限盘、逐盘并行发起，单盘失败不影响其余盘。
 /// 软件视角状态以磁盘序列号为键（与状态文件同键，DESIGN.md 2.7）：热插拔后盘号可能重排，
 /// 序列号保证状态仍归属同一块盘。
@@ -41,11 +43,11 @@ public sealed class DiskStateMachine
         }
     }
 
-    /// <summary>转休眠：在线时锁定并卸载全部卷后停转；离线时仅清离线属性、保持卷锁。</summary>
+    /// <summary>转休眠：在线时锁定并卸载全部卷后停转；离线时重发停转后清离线属性、保持卷锁；已休眠时只重发停转（重新断言，ADR-0006）。</summary>
     public Task<DiskOperationResult> SleepAsync(ManagedDisk disk) =>
         RunExclusiveAsync(disk.DiskNumber, () => SleepCoreAsync(disk));
 
-    /// <summary>转离线：在线时执行完整休眠步骤后置离线属性；休眠时保持卷锁、仅置离线属性。</summary>
+    /// <summary>转离线：在线时执行完整休眠步骤后置离线属性；休眠时重发停转、保持卷锁再置离线属性；已离线时重发停转与离线属性（重新断言，ADR-0006）。</summary>
     public Task<DiskOperationResult> OfflineAsync(ManagedDisk disk) =>
         RunExclusiveAsync(disk.DiskNumber, () => OfflineCoreAsync(disk));
 
@@ -119,7 +121,17 @@ public sealed class DiskStateMachine
         DiskState current = GetState(disk.SerialNumber);
         if (current == DiskState.Offline)
         {
-            // 离线→休眠：仅清离线属性、保持卷锁；盘已停转，无需重新停转。
+            // 离线→休眠：先重发停转消除停转歧义（自行起转后一次点击即停，ADR-0006；对沉睡盘不起转），
+            // 再清离线属性、保持卷锁。
+            if (!_ops.StandbyImmediate(disk.DiskNumber))
+            {
+                return Task.FromResult(new DiskOperationResult
+                {
+                    Success = false,
+                    Message = "重新停转命令失败，磁盘保持离线。",
+                });
+            }
+
             if (!_ops.ClearDiskOffline(disk.DiskNumber))
             {
                 return Task.FromResult(new DiskOperationResult
@@ -136,7 +148,18 @@ public sealed class DiskStateMachine
 
         if (current == DiskState.Sleeping)
         {
-            return Task.FromResult(new DiskOperationResult { Success = true }); // 幂等：已在休眠。
+            // 重新断言（ADR-0006）：盘自行起转后一次点击再休眠，只重发停转；
+            // 卷锁仍由本进程句柄持有，跳过锁卷/卸载/刷缓存——刷缓存会使沉睡盘起转。
+            if (!_ops.StandbyImmediate(disk.DiskNumber))
+            {
+                return Task.FromResult(new DiskOperationResult
+                {
+                    Success = false,
+                    Message = "重新停转命令失败，磁盘保持休眠。",
+                });
+            }
+
+            return Task.FromResult(new DiskOperationResult { Success = true });
         }
 
         var lockedVolumes = new List<string>();
@@ -156,7 +179,26 @@ public sealed class DiskStateMachine
         DiskState current = GetState(disk.SerialNumber);
         if (current == DiskState.Offline)
         {
-            return Task.FromResult(new DiskOperationResult { Success = true }); // 幂等：已在离线。
+            // 重新断言（ADR-0006）：重发停转 + 置离线属性，跳过锁卷/卸载/刷缓存。
+            if (!_ops.StandbyImmediate(disk.DiskNumber))
+            {
+                return Task.FromResult(new DiskOperationResult
+                {
+                    Success = false,
+                    Message = "重新停转命令失败，磁盘保持离线。",
+                });
+            }
+
+            if (!_ops.SetDiskOffline(disk.DiskNumber))
+            {
+                return Task.FromResult(new DiskOperationResult
+                {
+                    Success = false,
+                    Message = "置离线属性失败，磁盘保持离线。",
+                });
+            }
+
+            return Task.FromResult(new DiskOperationResult { Success = true });
         }
 
         var lockedVolumes = new List<string>();
@@ -169,7 +211,18 @@ public sealed class DiskStateMachine
                 return Task.FromResult(spinDownFailure);
             }
         }
-        // 休眠→离线：保持卷锁、不重复锁定，只追加置离线属性。
+        else
+        {
+            // 休眠→离线：保持卷锁、不重复锁定，先重发停转消除停转歧义（ADR-0006），再追加置离线属性。
+            if (!_ops.StandbyImmediate(disk.DiskNumber))
+            {
+                return Task.FromResult(new DiskOperationResult
+                {
+                    Success = false,
+                    Message = "重新停转命令失败，磁盘保持休眠。",
+                });
+            }
+        }
 
         if (!_ops.SetDiskOffline(disk.DiskNumber))
         {

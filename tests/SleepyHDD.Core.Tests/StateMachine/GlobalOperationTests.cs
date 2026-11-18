@@ -156,6 +156,30 @@ public class GlobalOperationTests
             $"同盘操作交错: {string.Join(", ", fake.Calls)}");
     }
 
+    [Fact]
+    public void SleepAllAsync_OnSleepingDisks_ReassertsStandbyForEveryDisk()
+    {
+        var fake = new FakeDiskDeviceOps();
+        var machine = new DiskStateMachine(fake, new FakeStateStore());
+        var disks = new List<ManagedDisk>
+        {
+            Disk(1, "HDD1", VolD),
+            Disk(2, "HDD2", VolE),
+        };
+
+        machine.SleepAllAsync(disks).GetAwaiter().GetResult();
+        fake.Calls.Clear();
+
+        var outcomes = machine.SleepAllAsync(disks).GetAwaiter().GetResult();
+
+        // "全部休眠"即自行起转时一次点击的再休眠入口（ADR-0006）：对每块休眠盘重发停转。
+        Assert.All(outcomes, outcome => Assert.True(outcome.Result.Success));
+        Assert.True(fake.HasCall("standby:1"));
+        Assert.True(fake.HasCall("standby:2"));
+        Assert.DoesNotContain(fake.Calls, call => call.StartsWith("flush:", StringComparison.Ordinal));
+        Assert.DoesNotContain(fake.Calls, call => call.StartsWith("lock:", StringComparison.Ordinal));
+    }
+
     private static DiskOperationResult OutcomeFor(
         IReadOnlyList<DiskOperationOutcome> outcomes,
         int diskNumber)

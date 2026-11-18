@@ -44,6 +44,9 @@ internal sealed class FakeDiskDeviceOps : IDiskDeviceOps
     /// <summary>SetDiskOffline 将失败的盘编号集合。</summary>
     public HashSet<int> SetOfflineFailures { get; } = new();
 
+    /// <summary>StandbyImmediate 将失败的盘编号集合。</summary>
+    public HashSet<int> StandbyFailures { get; } = new();
+
     /// <summary>ClearDiskOffline 将失败的盘编号集合。</summary>
     public HashSet<int> ClearOfflineFailures { get; } = new();
 
@@ -100,7 +103,7 @@ internal sealed class FakeDiskDeviceOps : IDiskDeviceOps
             gate.Wait(TimeSpan.FromSeconds(30));
         }
 
-        return true;
+        return !StandbyFailures.Contains(diskNumber);
     }
 
     public IReadOnlyList<string> GetOccupyingProcesses(string volumePath)
