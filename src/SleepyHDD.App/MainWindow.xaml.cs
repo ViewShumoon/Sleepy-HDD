@@ -1,8 +1,8 @@
-using System.Diagnostics;
+using Microsoft.UI;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using SleepyHDD.App.Devices;
-using WinRT.Interop;
 using SleepyHDD.App.Scheduler;
 using SleepyHDD.App.Tray;
 using SleepyHDD.App.ViewModels;
@@ -14,6 +14,8 @@ using SleepyHDD.Core.StateMachine;
 using SleepyHDD.Core.Store;
 using SleepyHDD.Native;
 using SleepyHDD.Native.AutoStart;
+using System.Diagnostics;
+using WinRT.Interop;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -50,6 +52,10 @@ namespace SleepyHDD.App
             autoStart.ReconcileOnStartup();
 
             var settings = new SettingsViewModel(settingsStore, autoStart);
+
+            IntPtr hwnd = WindowNative.GetWindowHandle(this);
+            SetWindowSize(hwnd, 800, 600);
+
             ViewModel = new MainViewModel(inventory, machine, settings);
 
             // 生命周期启动恢复（票 #9，ADR-0005）：按序列号匹配，为在案且仍离线的盘清障、
@@ -119,6 +125,15 @@ namespace SleepyHDD.App
             {
                 ViewModel.Settings.CommitAddSchedule();
             }
+        }
+
+        private void SetWindowSize(IntPtr hwnd, int width, int height)
+        {
+            var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
+            AppWindow appWindow = AppWindow.GetFromWindowId(windowId);
+
+            // Set the desired size using Resize()
+            appWindow.Resize(new Windows.Graphics.SizeInt32(width, height));
         }
     }
 }
