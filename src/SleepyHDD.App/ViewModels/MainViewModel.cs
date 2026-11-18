@@ -65,7 +65,7 @@ public sealed partial class MainViewModel : ObservableObject
         typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
 
     /// <summary>顶栏标题：磁盘列表为"受管磁盘"，设置页为"设置"。</summary>
-    public string HeaderText => ShowSettings ? "设置" : "受管磁盘";
+    public string HeaderText => ShowSettings ? "设置" : "机械硬盘";
 
     /// <summary>当前显示设置页。</summary>
     [ObservableProperty]

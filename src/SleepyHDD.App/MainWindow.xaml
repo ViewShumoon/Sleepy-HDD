@@ -65,17 +65,57 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- 顶栏：标题 + 全局按钮（"全部休眠/全部离线"文案跟随默认动作 + "全部唤醒"，票 #6，DESIGN.md 4.1） -->
+        <!-- 顶栏：标题行（设置页标题左侧显返回箭头；磁盘页右上角显设置入口）+ 标题下一行全局按钮（票 #6，DESIGN.md 4.1） -->
         <Grid Grid.Row="0" Margin="0,0,0,16">
-            <TextBlock
-                FontSize="24"
-                FontWeight="SemiBold"
-                Text="{Binding HeaderText}" />
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0">
+                <!-- 左：返回箭头（仅设置页）+ 标题 -->
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                    <Button
+                        Width="36"
+                        Height="36"
+                        Padding="0"
+                        VerticalAlignment="Center"
+                        Command="{Binding CloseSettingsCommand}"
+                        ToolTipService.ToolTip="返回"
+                        Visibility="{Binding IsSettingsVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <FontIcon
+                            Glyph="&#xE72B;"
+                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                            FontSize="16" />
+                    </Button>
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontSize="24"
+                        FontWeight="SemiBold"
+                        Text="{Binding HeaderText}" />
+                </StackPanel>
+                <!-- 右：设置入口图标按钮（仅磁盘页） -->
+                <Button
+                    Width="36"
+                    Height="36"
+                    Padding="0"
+                    HorizontalAlignment="Right"
+                    Command="{Binding OpenSettingsCommand}"
+                    ToolTipService.ToolTip="设置"
+                    Visibility="{Binding IsDiskViewVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <FontIcon
+                        Glyph="&#xE713;"
+                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                        FontSize="16" />
+                </Button>
+            </Grid>
+
+            <!-- 全局动作按钮行：靠左，仅磁盘页（"全部休眠/全部离线"文案跟随默认动作 + "全部唤醒"） -->
             <StackPanel
-                HorizontalAlignment="Right"
+                Grid.Row="1"
+                Margin="0,12,0,0"
                 Orientation="Horizontal"
                 Spacing="8"
                 Visibility="{Binding IsDiskViewVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -219,10 +259,13 @@
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Text="对在线磁盘执行的动作；顶栏全局按钮与磁盘卡片按钮均随此设置。"
                     TextWrapping="Wrap" />
-                <RadioButtons SelectedIndex="{Binding Settings.DefaultActionIndex, Mode=TwoWay}">
+                <ComboBox
+                    Width="200"
+                    HorizontalAlignment="Left"
+                    SelectedIndex="{Binding Settings.DefaultActionIndex, Mode=TwoWay}">
                     <x:String>休眠</x:String>
                     <x:String>离线</x:String>
-                </RadioButtons>
+                </ComboBox>
                 <!-- 开机自启开关（票 #11）：注册/注销登录触发 + 最高权限的任务计划程序任务 -->
                 <TextBlock
                     Margin="0,16,0,0"
@@ -297,29 +340,7 @@
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Text="手动控制内置机械硬盘休眠/离线的 Windows 工具。"
                     TextWrapping="Wrap" />
-
-                <Button
-                    Margin="0,16,0,0"
-                    HorizontalAlignment="Left"
-                    Content="返回"
-                    Command="{Binding CloseSettingsCommand}" />
             </StackPanel>
         </Grid>
-
-        <!-- 底栏：左下角设置入口（DESIGN.md 4.1） -->
-        <Button
-            Grid.Row="2"
-            Margin="0,16,0,0"
-            HorizontalAlignment="Left"
-            Command="{Binding OpenSettingsCommand}"
-            Visibility="{Binding IsDiskViewVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <FontIcon
-                    Glyph="&#xE713;"
-                    FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                    FontSize="16" />
-                <TextBlock Text="设置" />
-            </StackPanel>
-        </Button>
     </Grid>
 </Window>

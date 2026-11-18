@@ -64,13 +64,14 @@ public interface IDiskDeviceOps
     bool ProbeAtaPassThrough(int diskNumber);
 
     /// <summary>
-    /// 经 IOCTL_DISK_SET_DISK_ATTRIBUTES 置 DISK_ATTRIBUTE_OFFLINE（保留其余属性位）；
+    /// 置 DISK_ATTRIBUTE_OFFLINE：优先 IOCTL_DISK_SET_DISK_ATTRIBUTES（保留其余属性位），
+    /// IOCTL 被系统拒绝时回退 diskpart（VDS 机制）。
     /// 成功后该盘的卷从系统消失。离线属性本身不停转也不防唤醒，须与停转组合使用。
     /// </summary>
     bool SetDiskOffline(int diskNumber);
 
     /// <summary>
-    /// 清除指定物理盘的 DISK_ATTRIBUTE_OFFLINE（保留其余属性位）；卷由系统自动重新挂载。
+    /// 清除指定物理盘的 DISK_ATTRIBUTE_OFFLINE（IOCTL 优先，回退 diskpart online）；卷由系统自动重新挂载。
     /// </summary>
     bool ClearDiskOffline(int diskNumber);
 }

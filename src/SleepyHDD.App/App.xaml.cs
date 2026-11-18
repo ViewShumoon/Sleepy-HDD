@@ -55,10 +55,18 @@ namespace SleepyHDD.App
             _mainInstance = AppInstance.FindOrRegisterForKey(SingleInstanceKey);
             if (!_mainInstance.IsCurrent)
             {
-                _mainInstance.RedirectActivationToAsync(AppInstance.GetCurrent().GetActivatedEventArgs())
-                    .AsTask()
-                    .GetAwaiter()
-                    .GetResult();
+                // 主实例挂起或正在被强杀时，重定向可能抛 E_FAIL 或永不完成：加超时与异常兜底，
+                // 两种情况都让本实例正常退出，绝不因重定向失败而崩溃/挂起，留下第二个僵尸进程。
+                try
+                {
+                    _mainInstance.RedirectActivationToAsync(AppInstance.GetCurrent().GetActivatedEventArgs())
+                        .AsTask()
+                        .Wait(TimeSpan.FromSeconds(5));
+                }
+                catch
+                {
+                    // 主实例不可用：放弃重定向，照常退出（下次启动会重新注册为主实例）。
+                }
                 Application.Current.Exit();
                 return;
             }

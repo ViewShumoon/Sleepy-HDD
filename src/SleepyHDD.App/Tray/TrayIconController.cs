@@ -5,7 +5,6 @@ using H.NotifyIcon;
 using H.NotifyIcon.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media.Imaging;
 using SleepyHDD.App.ViewModels;
 using SleepyHDD.Core.Inventory;
 using SleepyHDD.Core.Notifications;
@@ -29,8 +28,9 @@ public sealed class TrayIconController : IDisposable
     private readonly MainViewModel _viewModel;
     private readonly Window _window;
     private readonly MenuFlyout _flyout = new();
-    private readonly BitmapImage _normalIcon;
-    private readonly BitmapImage _sleepingIcon;
+    private readonly string _normalIconPath;
+    private readonly string _sleepingIconPath;
+    private TrayIconVariant? _currentVariant;
     private readonly Dictionary<DiskCardViewModel, PropertyChangedEventHandler> _cardHandlers = new();
     private bool _isExiting;
     private bool _disposed;
@@ -42,13 +42,18 @@ public sealed class TrayIconController : IDisposable
         _viewModel = viewModel;
         _window = window;
 
+        // 闪退修复（一）：TaskbarIcon.IconSource（ImageSource→Icon 转换）对 PNG 流抛 ArgumentException 并经原生消息泵崩溃进程；
+        // 改用 Icon DP 直接加载单帧 PNG-in-ICO（容器样式同 Assets\app.ico）。
+        // 闪退修复（二）：库的 Icon DP 为所有权转移语义——OnIconChanged 会 Dispose 旧值，
+        // 故每次设置必须传新建实例，绝不可缓存复用（复用会在第二次切换时使用已释放 Icon，
+        // 抛 ObjectDisposedException("Icon") 再次经消息泵崩溃；唤醒盘即"睡眠→常态"的首次回切场景必崩）。
         var assetsDirectory = Path.Combine(AppContext.BaseDirectory, "Assets");
-        _normalIcon = new BitmapImage(new Uri(Path.Combine(assetsDirectory, "tray-normal.png")));
-        _sleepingIcon = new BitmapImage(new Uri(Path.Combine(assetsDirectory, "tray-sleeping.png")));
+        _normalIconPath = Path.Combine(assetsDirectory, "tray-normal.ico");
+        _sleepingIconPath = Path.Combine(assetsDirectory, "tray-sleeping.ico");
 
         _tray = new TaskbarIcon
         {
-            IconSource = _normalIcon,
+            Icon = new System.Drawing.Icon(_normalIconPath),
             ToolTipText = "Sleepy HDD",
             ContextFlyout = _flyout,
         };
@@ -98,9 +103,13 @@ public sealed class TrayIconController : IDisposable
             .Select(card => new TrayDiskEntry(card.DiskNumber, card.Model, card.IsRestricted, card.State))
             .ToList();
 
-        _tray.IconSource = TrayMenuBuilder.SelectIconVariant(entries) == TrayIconVariant.Sleeping
-            ? _sleepingIcon
-            : _normalIcon;
+        // 变体未变则不动 Icon（避免每次状态抖动都重建句柄）；变化时新建实例，旧值交由库的 OnIconChanged 释放（所有权转移，见构造函数注释）。
+        var variant = TrayMenuBuilder.SelectIconVariant(entries);
+        if (variant != _currentVariant)
+        {
+            _currentVariant = variant;
+            _tray.Icon = new System.Drawing.Icon(variant == TrayIconVariant.Sleeping ? _sleepingIconPath : _normalIconPath);
+        }
 
         _flyout.Items.Clear();
         _flyout.Items.Add(Item("打开主窗口", ShowMainWindow));
@@ -135,12 +144,19 @@ public sealed class TrayIconController : IDisposable
         _flyout.Items.Add(Item("退出", ExitApplication));
     }
 
-    /// <summary>无命令的固定菜单项（点击直接执行动作）。</summary>
+    /// <summary>
+    /// 固定菜单项（点击直接执行动作）。
+    /// 必须经 Command 而非 Click 事件接线：H.NotifyIcon 默认 ContextMenuMode.PopupMenu，
+    /// 右键时把 MenuFlyout 转换为原生 Win32 菜单，点击只回调 MenuFlyoutItem.Command 的
+    /// TryExecute，XAML Click 事件永不触发（托盘"退出/打开主窗口"无响应的回归教训）。
+    /// </summary>
     private static MenuFlyoutItem Item(string text, Action action)
     {
-        var item = new MenuFlyoutItem { Text = text };
-        item.Click += (_, _) => action();
-        return item;
+        return new MenuFlyoutItem
+        {
+            Text = text,
+            Command = new RelayCommand(action),
+        };
     }
 
     private void ShowMainWindow()

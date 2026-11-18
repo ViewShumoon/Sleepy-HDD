@@ -39,6 +39,10 @@
          票 #12：显式声明发布复制——Content 默认不进 publish 目录，缺失会导致发布产物启动时托盘构造抛异常。 -->
     <Content Include="Assets\tray-normal.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Assets\tray-sleeping.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- 闪退修复：托盘改用 TaskbarIcon.Icon DP，运行时加载单帧 PNG-in-ICO（IconSource 的 ImageSource→Icon 转换对 PNG 流抛 ArgumentException）。
+         PNG 保留为源美术与票 #7 核对依据。 -->
+    <Content Include="Assets\tray-normal.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\tray-sleeping.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

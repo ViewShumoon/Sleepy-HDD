@@ -30,4 +30,10 @@
     <Compile Include="..\..\src\SleepyHDD.App\Startup\RuntimeCheck.cs" Link="Startup\RuntimeCheck.cs" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- 闪退回归守卫：链接托盘 ICO 资产到测试输出，TrayIconAssetsTests 校验容器结构（System.Drawing.Icon 可加载的前提）。 -->
+    <Content Include="..\..\src\SleepyHDD.App\Assets\tray-normal.ico" Link="Assets\tray-normal.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\src\SleepyHDD.App\Assets\tray-sleeping.ico" Link="Assets\tray-sleeping.ico" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

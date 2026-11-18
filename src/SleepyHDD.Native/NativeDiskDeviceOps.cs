@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
 using SleepyHDD.Core.Devices;
@@ -180,10 +181,72 @@ public sealed class NativeDiskDeviceOps : IDiskDeviceOps
     }
 
     /// <inheritdoc />
-    public bool SetDiskOffline(int diskNumber) => TryModifyDiskOffline(diskNumber, offline: true);
+    public bool SetDiskOffline(int diskNumber) =>
+        TryModifyDiskOffline(diskNumber, offline: true) || TryDiskPartOffline(diskNumber, offline: true);
 
     /// <inheritdoc />
-    public bool ClearDiskOffline(int diskNumber) => TryModifyDiskOffline(diskNumber, offline: false);
+    public bool ClearDiskOffline(int diskNumber) =>
+        TryModifyDiskOffline(diskNumber, offline: false) || TryDiskPartOffline(diskNumber, offline: false);
+
+    /// <summary>
+    /// IOCTL 被拒时的回退路径：diskpart /s 临时脚本（VDS 机制，与手动 diskpart 相同）。
+    /// Windows 11 26300 等 build 上 disk.sys 不再处理 GET/SET_DISK_ATTRIBUTES
+    /// （ERROR_INVALID_FUNCTION=1），但 VDS 仍可读写离线属性。以退出码 0 判定成功，30 秒超时。
+    /// </summary>
+    private static bool TryDiskPartOffline(int diskNumber, bool offline)
+    {
+        string scriptPath = Path.Combine(
+            Path.GetTempPath(), $"SleepyHDD-disk{diskNumber}-{(offline ? "offline" : "online")}.txt");
+        try
+        {
+            File.WriteAllText(scriptPath,
+                $"select disk {diskNumber}\r\n{(offline ? "offline disk" : "online disk")}\r\n");
+
+            var startInfo = new ProcessStartInfo("diskpart", $"/s \"{scriptPath}\"")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+            };
+
+            using Process? process = Process.Start(startInfo);
+            if (process is null)
+            {
+                return false;
+            }
+
+            // 必须持续读取 stdout，否则输出填满管道缓冲区后 diskpart 会挂起。
+            string output = process.StandardOutput.ReadToEnd();
+            if (!process.WaitForExit(30_000))
+            {
+                process.Kill(entireProcessTree: true);
+                return false;
+            }
+
+            if (process.ExitCode != 0)
+            {
+                Debug.WriteLine($"[NativeDiskDeviceOps] diskpart {(offline ? "offline" : "online")} 失败 exit={process.ExitCode}: {output}");
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[NativeDiskDeviceOps] diskpart 回退异常: {ex}");
+            return false;
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(scriptPath);
+            }
+            catch (IOException)
+            {
+            }
+        }
+    }
 
     /// <summary>
     /// 读-改-写磁盘属性：GET_DISK_ATTRIBUTES 取当前 Attributes，仅翻转 OFFLINE 位
